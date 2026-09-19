@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-type PageKey = 'home' | 'my-recipes' | 'new-recipe' | 'preferences' | 'household'
+type PageKey = 'home' | 'my-recipes' | 'new-recipe' | 'preferences' | 'household' | 'recipe'
 
 type TopNavProps = {
   session: Awaited<ReturnType<typeof import('../lib/supabase').supabase.auth.getSession>>['data']['session'] | null

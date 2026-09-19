@@ -8,6 +8,21 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (function () {
+        const params = new URLSearchParams(window.location.search);
+        const redirectPath = params.get('p');
+
+        if (redirectPath) {
+          const repoBase = '/home-recipes-dev-frontend';
+          const normalizedPath = redirectPath.startsWith(repoBase)
+            ? redirectPath
+            : `${repoBase}${redirectPath.startsWith('/') ? redirectPath : `/${redirectPath}`}`;
+
+          window.history.replaceState(null, '', normalizedPath);
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

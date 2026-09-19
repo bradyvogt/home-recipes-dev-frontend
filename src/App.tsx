@@ -7,8 +7,9 @@ import { MyRecipesPage } from './pages/MyRecipesPage'
 import { NewRecipePage } from './pages/NewRecipePage'
 import { PreferencesPage } from './pages/PreferencesPage'
 import { HouseholdPage } from './pages/HouseholdPage'
+import { SingleRecipePage } from './pages/SingleRecipePage'
 
-type PageKey = 'home' | 'my-recipes' | 'new-recipe' | 'preferences' | 'household'
+type PageKey = 'home' | 'my-recipes' | 'new-recipe' | 'preferences' | 'household' | 'recipe'
 
 const navItems = [
   { key: 'my-recipes', label: 'My Recipes' },
@@ -20,7 +21,28 @@ const navItems = [
 function App() {
   const [session, setSession] = useState<Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'] | null>(null)
   const [activePage, setActivePage] = useState<PageKey>('home')
+  const [currentRecipeSlug, setCurrentRecipeSlug] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+
+  const readPathState = () => {
+    const basePrefix = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '')
+    const candidates = [window.location.pathname, new URLSearchParams(window.location.search).get('p') ?? '']
+
+    for (const candidate of candidates) {
+      if (!candidate) continue
+
+      const pathOnly = candidate.split('?')[0]
+      const normalized = decodeURIComponent(pathOnly).replace(basePrefix, '')
+      const match = normalized.match(/^\/recipe\/([^/]+)$/)
+      if (match) {
+        setCurrentRecipeSlug(match[1])
+        setActivePage('recipe')
+        return
+      }
+    }
+
+    setCurrentRecipeSlug(null)
+  }
 
   useEffect(() => {
     const loadSession = async () => {
@@ -30,6 +52,7 @@ function App() {
     }
 
     void loadSession()
+    readPathState()
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession)
@@ -38,8 +61,12 @@ function App() {
       }
     })
 
+    const handleLocationChange = () => readPathState()
+    window.addEventListener('popstate', handleLocationChange)
+
     return () => {
       authListener.subscription.unsubscribe()
+      window.removeEventListener('popstate', handleLocationChange)
     }
   }, [])
 
@@ -61,7 +88,17 @@ function App() {
   }, [session])
 
   const handleLogoClick = () => {
+    setCurrentRecipeSlug(null)
     setActivePage(session ? 'my-recipes' : 'home')
+    window.history.pushState({}, '', import.meta.env.BASE_URL || '/')
+  }
+
+  const handleNavigate = (page: PageKey) => {
+    setActivePage(page)
+    setCurrentRecipeSlug(null)
+    if (page === 'home' || page === 'my-recipes' || page === 'new-recipe' || page === 'preferences' || page === 'household') {
+      window.history.pushState({}, '', import.meta.env.BASE_URL || '/')
+    }
   }
 
   const handleGoogleSignIn = async () => {
@@ -86,6 +123,11 @@ function App() {
     setActivePage('home')
   }
 
+  const visiblePage = currentRecipeSlug ? 'recipe' : session ? activePage : 'home'
+  const sharedHouseholdId = new URLSearchParams(window.location.search).get('household')?.trim() || ''
+  const isSharedRecipesPage = window.location.pathname.endsWith('/recipes') && Boolean(sharedHouseholdId)
+  const pageToRender = currentRecipeSlug ? 'recipe' : isSharedRecipesPage ? 'my-recipes' : visiblePage
+
   if (isLoading) {
     return <div className="loading-state">Loading…</div>
   }
@@ -97,21 +139,22 @@ function App() {
         activePage={activePage}
         navItems={navItems}
         initials={initials}
-        onNavigate={setActivePage}
+        onNavigate={handleNavigate}
         onGoogleSignIn={handleGoogleSignIn}
         onSignOut={handleSignOut}
         onLogoClick={handleLogoClick}
       />
 
       <main className="content-shell">
-        {activePage === 'home' ? (
+        {pageToRender === 'home' ? (
           <HomePage session={session} onNavigate={setActivePage} onGoogleSignIn={handleGoogleSignIn} />
         ) : null}
 
-        {activePage === 'my-recipes' ? <MyRecipesPage userName={userName} /> : null}
-        {activePage === 'new-recipe' ? <NewRecipePage session={session} onGoogleSignIn={handleGoogleSignIn} /> : null}
-        {activePage === 'preferences' ? <PreferencesPage /> : null}
-        {activePage === 'household' ? <HouseholdPage /> : null}
+        {pageToRender === 'my-recipes' ? <MyRecipesPage userName={userName} householdId={sharedHouseholdId || undefined} isPublic={isSharedRecipesPage} /> : null}
+        {pageToRender === 'new-recipe' ? <NewRecipePage session={session} onGoogleSignIn={handleGoogleSignIn} /> : null}
+        {pageToRender === 'preferences' ? <PreferencesPage /> : null}
+        {pageToRender === 'household' ? <HouseholdPage /> : null}
+        {pageToRender === 'recipe' && currentRecipeSlug ? <SingleRecipePage slug={currentRecipeSlug} session={session} /> : null}
       </main>
     </div>
   )

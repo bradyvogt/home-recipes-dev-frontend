@@ -12,6 +12,8 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    env:
+      GITHUB_ACTIONS: 'true'
 
     steps:
       - name: Checkout Code
