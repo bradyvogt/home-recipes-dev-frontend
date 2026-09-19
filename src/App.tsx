@@ -1,121 +1,119 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+import { useEffect, useMemo, useState } from 'react'
+import { supabase } from './lib/supabase'
 import './App.css'
+import { TopNav } from './components/TopNav'
+import { HomePage } from './pages/HomePage'
+import { MyRecipesPage } from './pages/MyRecipesPage'
+import { NewRecipePage } from './pages/NewRecipePage'
+import { PreferencesPage } from './pages/PreferencesPage'
+import { HouseholdPage } from './pages/HouseholdPage'
+
+type PageKey = 'home' | 'my-recipes' | 'new-recipe' | 'preferences' | 'household'
+
+const navItems = [
+  { key: 'my-recipes', label: 'My Recipes' },
+  { key: 'preferences', label: 'Preferences' },
+  { key: 'household', label: 'My Household' },
+  { key: 'home', label: 'Home / About' },
+] as const
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [session, setSession] = useState<Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'] | null>(null)
+  const [activePage, setActivePage] = useState<PageKey>('home')
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const loadSession = async () => {
+      const { data } = await supabase.auth.getSession()
+      setSession(data.session)
+      setIsLoading(false)
+    }
+
+    void loadSession()
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession)
+      if (nextSession) {
+        setActivePage('my-recipes')
+      }
+    })
+
+    return () => {
+      authListener.subscription.unsubscribe()
+    }
+  }, [])
+
+  const userName = useMemo(() => {
+    const email = session?.user?.email ?? 'Guest'
+    const first = email.split('@')[0] ?? 'Guest'
+    return first.trim() || 'Guest'
+  }, [session])
+
+  const initials = useMemo(() => {
+    if (!session?.user?.email) return 'G'
+
+    const parts = session.user.email.split('@')[0].split(/[._-]/).filter(Boolean)
+    if (parts.length >= 2) {
+      return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase()
+    }
+
+    return (session.user.email[0] ?? 'G').toUpperCase()
+  }, [session])
+
+  const handleLogoClick = () => {
+    setActivePage(session ? 'my-recipes' : 'home')
+  }
+
+  const handleGoogleSignIn = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    })
+
+    if (error) {
+      console.error('Google sign-in failed:', error)
+    }
+  }
+
+  const handleSignOut = async () => {
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      console.error('Sign out failed:', error)
+    }
+
+    setActivePage('home')
+  }
+
+  if (isLoading) {
+    return <div className="loading-state">Loading…</div>
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="app-shell">
+      <TopNav
+        session={session}
+        activePage={activePage}
+        navItems={navItems}
+        initials={initials}
+        onNavigate={setActivePage}
+        onGoogleSignIn={handleGoogleSignIn}
+        onSignOut={handleSignOut}
+        onLogoClick={handleLogoClick}
+      />
 
-      <div className="ticks"></div>
+      <main className="content-shell">
+        {activePage === 'home' ? (
+          <HomePage session={session} onNavigate={setActivePage} onGoogleSignIn={handleGoogleSignIn} />
+        ) : null}
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+        {activePage === 'my-recipes' ? <MyRecipesPage userName={userName} /> : null}
+        {activePage === 'new-recipe' ? <NewRecipePage session={session} onGoogleSignIn={handleGoogleSignIn} /> : null}
+        {activePage === 'preferences' ? <PreferencesPage /> : null}
+        {activePage === 'household' ? <HouseholdPage /> : null}
+      </main>
+    </div>
   )
 }
 
