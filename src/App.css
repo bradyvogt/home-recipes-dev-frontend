@@ -180,6 +180,13 @@
   font-size: clamp(2.7rem, 5vw, 5rem);
 }
 
+.hero-subtitle {
+  color: #b66834;
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: -2px 0 18px;
+}
+
 .hero-page p,
 .placeholder-panel p,
 .placeholder-panel span {

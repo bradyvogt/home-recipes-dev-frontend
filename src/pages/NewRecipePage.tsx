@@ -7,6 +7,7 @@ type RecipeMethod = 'url' | 'image' | 'describe'
 type NewRecipePageProps = {
   session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'] | null
   onGoogleSignIn: () => Promise<void>
+  onRecipeAdded?: (slug: string) => void
 }
 
 const SUPABASE_FUNCTION_ROOT = 'https://bpcvnedueofvttcvnvel.supabase.co/functions/v1'
@@ -16,13 +17,33 @@ type FeedbackState = {
   message: string
 }
 
-export function NewRecipePage({ session, onGoogleSignIn }: NewRecipePageProps) {
+export function NewRecipePage({ session, onGoogleSignIn, onRecipeAdded }: NewRecipePageProps) {
   const [method, setMethod] = useState<RecipeMethod>('url')
   const [url, setUrl] = useState('')
   const [description, setDescription] = useState('')
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [feedback, setFeedback] = useState<FeedbackState | null>(null)
+
+  const getNewestRecipeSlug = async (name: string): Promise<string | null> => {
+    const trimmedName = name.trim()
+    if (!trimmedName) return null
+
+    const { data, error } = await supabase
+      .from('recipes')
+      .select('slug')
+      .eq('recipe_name', trimmedName)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      console.warn('Unable to resolve the saved recipe slug.', error)
+      return null
+    }
+
+    return data?.slug ?? null
+  }
 
   const methodOptions: { key: RecipeMethod; label: string; description: string }[] = [
     { key: 'url', label: 'By URL', description: 'Paste a recipe page or blog post URL' },
@@ -117,6 +138,12 @@ export function NewRecipePage({ session, onGoogleSignIn }: NewRecipePageProps) {
         const data = await invokeRecipeImport('url', JSON.stringify({ url }), headers)
 
         if (data?.recipe?.name) {
+          const slug = await getNewestRecipeSlug(data.recipe.name)
+          if (slug && onRecipeAdded) {
+            onRecipeAdded(slug)
+            return
+          }
+
           setFeedback({ type: 'success', message: `Recipe added: ${data.recipe.name}` })
         } else {
           setFeedback({ type: 'success', message: 'Recipe added successfully.' })
@@ -137,6 +164,12 @@ export function NewRecipePage({ session, onGoogleSignIn }: NewRecipePageProps) {
         const data = await invokeRecipeImport('image', formData, headers)
 
         if (data?.recipe?.name) {
+          const slug = await getNewestRecipeSlug(data.recipe.name)
+          if (slug && onRecipeAdded) {
+            onRecipeAdded(slug)
+            return
+          }
+
           setFeedback({ type: 'success', message: `Recipe added: ${data.recipe.name}` })
         } else {
           setFeedback({ type: 'success', message: 'Recipe added successfully from your image.' })
@@ -154,6 +187,12 @@ export function NewRecipePage({ session, onGoogleSignIn }: NewRecipePageProps) {
         const data = await invokeRecipeImport('describe', JSON.stringify({ text: description }), headers)
 
         if (data?.recipe?.name) {
+          const slug = await getNewestRecipeSlug(data.recipe.name)
+          if (slug && onRecipeAdded) {
+            onRecipeAdded(slug)
+            return
+          }
+
           setFeedback({ type: 'success', message: `Recipe added: ${data.recipe.name}` })
         } else {
           setFeedback({ type: 'success', message: 'Recipe added successfully from your description.' })

@@ -29,7 +29,7 @@ export function TopNav({
     <header className="top-nav">
       <button type="button" className="brand" onClick={onLogoClick} aria-label="Go to home or recipes">
         <span className="brand-mark">H</span>
-        <span className="brand-text">Home Recipes</span>
+        <span className="brand-text">Hangry Husband</span>
       </button>
 
       <div className="nav-actions">

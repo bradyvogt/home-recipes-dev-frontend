@@ -93,6 +93,13 @@ function App() {
     window.history.pushState({}, '', import.meta.env.BASE_URL || '/')
   }
 
+  const handleRecipeAdded = (slug: string) => {
+    setCurrentRecipeSlug(slug)
+    setActivePage('recipe')
+    const recipePath = `${import.meta.env.BASE_URL || '/'}recipe/${encodeURIComponent(slug)}`
+    window.history.pushState({}, '', recipePath)
+  }
+
   const handleNavigate = (page: PageKey) => {
     setActivePage(page)
     setCurrentRecipeSlug(null)
@@ -152,7 +159,7 @@ function App() {
         ) : null}
 
         {pageToRender === 'my-recipes' ? <MyRecipesPage userName={userName} householdId={sharedHouseholdId || undefined} isPublic={isSharedRecipesPage} /> : null}
-        {pageToRender === 'new-recipe' ? <NewRecipePage session={session} onGoogleSignIn={handleGoogleSignIn} /> : null}
+        {pageToRender === 'new-recipe' ? <NewRecipePage session={session} onGoogleSignIn={handleGoogleSignIn} onRecipeAdded={handleRecipeAdded} /> : null}
         {pageToRender === 'preferences' ? <PreferencesPage /> : null}
         {pageToRender === 'household' ? <HouseholdPage /> : null}
         {pageToRender === 'recipe' && currentRecipeSlug ? <SingleRecipePage slug={currentRecipeSlug} session={session} /> : null}

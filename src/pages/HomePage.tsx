@@ -8,18 +8,14 @@ export function HomePage({ session, onNavigate, onGoogleSignIn }: HomePageProps)
   return (
     <section className="page-card hero-page">
       <div className="eyebrow">About</div>
-      <h1>Hi, I&apos;m Brady Vogt.</h1>
+      <h1>Hangry Husband</h1>
+      <div className="hero-subtitle">Created by Brady Vogt, Husband Since 2024</div>
       <p>
-        I built this recipe app for my family because I wanted a simple way to keep track of the meals we love, the
-        ones we keep forgetting, and the ones we need to make again without guessing.
+        Sometimes husbands are required to cook and grocery shop, but unlike their better half, husbands can get angry. Especially when they forget a recipe they just made last week.
       </p>
       <p>
-        I&apos;m a husband, not a cook. I need clear, step-by-step directions. I need to be told exactly what to do, how long
-        to do it, and how to keep the process from getting lost in the middle.
-      </p>
-      <p>
-        This app is for people like me: husbands who want to help, families who want to save recipes they actually use,
-        and anyone who needs a reliable place to keep the instructions they can follow without stress.
+        So I made Hangry Husband. It keeps the recipes your household actually uses close at hand, so dinner and the shopping list
+        don&apos;t have to depend on anyone&apos;s memory.
       </p>
       <div className="hero-actions">
         <button type="button" className="primary-button" onClick={() => onNavigate(session ? 'my-recipes' : 'home')}>
