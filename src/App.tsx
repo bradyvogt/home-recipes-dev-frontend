@@ -102,10 +102,11 @@ function App() {
   }
 
   const handleGoogleSignIn = async () => {
+    const redirectTo = new URL(import.meta.env.BASE_URL || '/', window.location.origin).toString()
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin,
+        redirectTo,
       },
     })
 
