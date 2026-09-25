@@ -8,10 +8,12 @@ import { NewRecipePage } from './pages/NewRecipePage'
 import { PreferencesPage } from './pages/PreferencesPage'
 import { HouseholdPage } from './pages/HouseholdPage'
 import { SingleRecipePage } from './pages/SingleRecipePage'
+import { BrowseRecipesPage } from './pages/BrowseRecipesPage'
 
-type PageKey = 'home' | 'my-recipes' | 'new-recipe' | 'preferences' | 'household' | 'recipe'
+type PageKey = 'home' | 'browse' | 'my-recipes' | 'new-recipe' | 'preferences' | 'household' | 'recipe'
 
 const navItems = [
+  { key: 'browse', label: 'Browse Recipes' },
   { key: 'my-recipes', label: 'My Recipes' },
   { key: 'preferences', label: 'Preferences' },
   { key: 'household', label: 'My Household' },
@@ -103,7 +105,7 @@ function App() {
   const handleNavigate = (page: PageKey) => {
     setActivePage(page)
     setCurrentRecipeSlug(null)
-    if (page === 'home' || page === 'my-recipes' || page === 'new-recipe' || page === 'preferences' || page === 'household') {
+    if (page !== 'recipe') {
       window.history.pushState({}, '', import.meta.env.BASE_URL || '/')
     }
   }
@@ -131,7 +133,7 @@ function App() {
     setActivePage('home')
   }
 
-  const visiblePage = currentRecipeSlug ? 'recipe' : session ? activePage : 'home'
+  const visiblePage = currentRecipeSlug ? 'recipe' : session || activePage === 'browse' ? activePage : 'home'
   const sharedHouseholdId = new URLSearchParams(window.location.search).get('household')?.trim() || ''
   const isSharedRecipesPage = window.location.pathname.endsWith('/recipes') && Boolean(sharedHouseholdId)
   const pageToRender = currentRecipeSlug ? 'recipe' : isSharedRecipesPage ? 'my-recipes' : visiblePage
@@ -158,6 +160,7 @@ function App() {
           <HomePage session={session} onNavigate={setActivePage} onGoogleSignIn={handleGoogleSignIn} />
         ) : null}
 
+        {pageToRender === 'browse' ? <BrowseRecipesPage /> : null}
         {pageToRender === 'my-recipes' ? <MyRecipesPage userName={userName} householdId={sharedHouseholdId || undefined} isPublic={isSharedRecipesPage} /> : null}
         {pageToRender === 'new-recipe' ? <NewRecipePage session={session} onGoogleSignIn={handleGoogleSignIn} onRecipeAdded={handleRecipeAdded} /> : null}
         {pageToRender === 'preferences' ? <PreferencesPage /> : null}

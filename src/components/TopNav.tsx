@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-type PageKey = 'home' | 'my-recipes' | 'new-recipe' | 'preferences' | 'household' | 'recipe'
+type PageKey = 'home' | 'browse' | 'my-recipes' | 'new-recipe' | 'preferences' | 'household' | 'recipe'
 
 type TopNavProps = {
   session: Awaited<ReturnType<typeof import('../lib/supabase').supabase.auth.getSession>>['data']['session'] | null
@@ -28,11 +28,18 @@ export function TopNav({
   return (
     <header className="top-nav">
       <button type="button" className="brand" onClick={onLogoClick} aria-label="Go to home or recipes">
-        <span className="brand-mark">H</span>
+        <span className="brand-mark">HH</span>
         <span className="brand-text">Hangry Husband</span>
       </button>
 
       <div className="nav-actions">
+        <button
+          type="button"
+          className={activePage === 'browse' ? 'browse-nav-button active' : 'browse-nav-button'}
+          onClick={() => onNavigate('browse')}
+        >
+          Browse Recipes
+        </button>
         <button type="button" className="new-recipe-button" onClick={() => onNavigate('new-recipe')}>
           New Recipe
         </button>
