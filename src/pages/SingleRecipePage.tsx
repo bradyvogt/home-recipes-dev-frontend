@@ -284,24 +284,21 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
         recipeInstructions: editValues.recipeInstructions.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean),
       }
 
-      const endpoint = `${SUPABASE_FUNCTION_ROOT}/index-recipe/${encodeURIComponent(recipeMeta.slug)}`
-      const response = await fetch(endpoint, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${sessionData.session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
+      const { data: updatedRecord, error: updateError } = await supabase
+        .from('recipes')
+        .update({ recipe_data: payload })
+        .eq('id', recipeMeta.id)
+        .select('id, slug, recipe_data')
+        .single()
 
-      const json = await response.json().catch(() => null)
-      if (!response.ok) {
-        throw new Error(json?.error ?? 'Unable to save the recipe edit.')
-      }
+      if (updateError) throw updateError
 
-      const updatedRecipe = (json?.recipe ?? payload) as RecipeData
+      const updatedRecipe = updatedRecord.recipe_data as RecipeData
+      setRecipeMeta({ id: updatedRecord.id, slug: updatedRecord.slug })
       setRecipe(updatedRecipe)
       setEditValues(buildEditValues(updatedRecipe))
+      const recipePath = `${import.meta.env.BASE_URL || '/'}recipe/${encodeURIComponent(updatedRecord.slug)}`
+      window.history.replaceState({}, '', recipePath)
       setEditMode(false)
       setSaveState({ type: 'success', message: 'Recipe updated successfully.' })
     } catch (saveError) {

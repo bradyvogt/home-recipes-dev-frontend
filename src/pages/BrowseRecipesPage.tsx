@@ -1,18 +1,34 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
+type RecipeCategory = 'meal' | 'side' | 'dessert' | 'drink'
+
+type BackendRecipeData = {
+  name: string
+  description?: string
+  sourceType?: string
+  sourceLink?: string
+  recipeYield: number
+  prepTime: string
+  cookTime: string
+  totalTime: string
+  recipeIngredient: string[]
+  recipeInstructions: string[]
+  recipeCategory?: RecipeCategory
+}
+
 type RecipeRecord = {
   id: string
-  slug: string
-  recipe_name: string
-  recipe_category: string
-  created_at: string
-  recipe_data: Record<string, unknown>
+  slug: string | null
+  recipe_name: string | null
+  recipe_category: string | null
+  created_at: string | null
+  recipe_data: BackendRecipeData | Record<string, unknown>
 }
 
 type BrowseRecipe = {
   id: string
-  slug: string
+  slug: string | null
   name: string
   description: string
   category: string
@@ -24,7 +40,7 @@ type BrowseRecipe = {
   searchTerms: string[]
 }
 
-type CategoryFilter = 'all' | 'meal' | 'side' | 'dessert' | 'drink'
+type CategoryFilter = 'all' | RecipeCategory
 type SortOrder = 'relevance' | 'newest' | 'name' | 'quickest'
 
 const PAGE_SIZE = 24
@@ -67,12 +83,13 @@ const durationInMinutes = (value: unknown) => {
 
 const normalizeRecipe = (record: RecipeRecord): BrowseRecipe => {
   const data = record.recipe_data ?? {}
-  const prepMinutes = durationInMinutes(data.prepTime ?? data.prep_time)
-  const cookMinutes = durationInMinutes(data.cookTime ?? data.cook_time)
-  const explicitTotal = durationInMinutes(data.totalTime ?? data.total_time)
-  const servingsValue = data.recipeYield ?? data.servings
+  const legacyData = data as Record<string, unknown>
+  const prepMinutes = durationInMinutes(data.prepTime ?? legacyData.prep_time)
+  const cookMinutes = durationInMinutes(data.cookTime ?? legacyData.cook_time)
+  const explicitTotal = durationInMinutes(data.totalTime ?? legacyData.total_time)
+  const servingsValue = data.recipeYield ?? legacyData.servings
   const categories = asStringArray(data.recipeCategory)
-  const cuisines = asStringArray(data.recipeCuisine)
+  const cuisines = asStringArray(legacyData.recipeCuisine)
   const generatedCategory = record.recipe_category || categories[0] || 'meal'
   let categoryValues = [generatedCategory]
   if (categoryValues[0].startsWith('[')) {
@@ -84,7 +101,7 @@ const normalizeRecipe = (record: RecipeRecord): BrowseRecipe => {
     }
   }
   const categoryText = [...categoryValues, ...categories, generatedCategory].join(' ').toLowerCase()
-  const category: string = /\bdessert\b|baked good/.test(categoryText)
+  const category: RecipeCategory = /\bdessert\b|baked good/.test(categoryText)
     ? 'dessert'
     : /\bside\b/.test(categoryText)
       ? 'side'
@@ -102,7 +119,7 @@ const normalizeRecipe = (record: RecipeRecord): BrowseRecipe => {
     ingredients: asStringArray(data.recipeIngredient),
     servings: typeof servingsValue === 'number' ? servingsValue : Number.parseInt(asString(servingsValue), 10) || 0,
     totalMinutes: explicitTotal || prepMinutes + cookMinutes,
-    createdAt: record.created_at,
+    createdAt: record.created_at ?? '',
     searchTerms: [...categories, ...cuisines],
   }
 }
@@ -265,7 +282,9 @@ export function BrowseRecipesPage() {
                 {formatDuration(recipe.totalMinutes) ? <span>{formatDuration(recipe.totalMinutes)}</span> : null}
                 {recipe.servings ? <span>{recipe.servings} servings</span> : null}
               </div>
-              <h2><a href={`${import.meta.env.BASE_URL}recipe/${encodeURIComponent(recipe.slug)}`}>{recipe.name}</a></h2>
+              <h2>
+                {recipe.slug ? <a href={`${import.meta.env.BASE_URL}recipe/${encodeURIComponent(recipe.slug)}`}>{recipe.name}</a> : recipe.name}
+              </h2>
               {recipe.description ? <p>{recipe.description}</p> : null}
               {recipe.ingredients.length ? <div className="browse-ingredient-preview">{recipe.ingredients.slice(0, 3).join(' · ')}</div> : null}
             </div>
