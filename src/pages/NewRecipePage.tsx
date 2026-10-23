@@ -93,8 +93,15 @@ export function NewRecipePage({ session, onGoogleSignIn, onRecipeAdded }: NewRec
         }
 
         const errorText = await response.text()
-        const parsedError = errorText ? JSON.parse(errorText) : null
-        const message = parsedError?.error ?? 'Recipe import failed.'
+        let parsedError: { error?: string } | null = null
+        try {
+          parsedError = errorText ? JSON.parse(errorText) : null
+        } catch {
+          // Gateways can return plain-text or HTML errors instead of JSON.
+        }
+        const message = parsedError?.error ?? (response.status === 404
+          ? 'Recipe import endpoint returned 404.'
+          : `Recipe import failed (${response.status}).`)
 
         if (response.status !== 404) {
           throw new Error(message)

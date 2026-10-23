@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { durationInMinutes, normalizeStoredRecipe } from '../lib/recipeSchema'
 
 type MyRecipesPageProps = {
   userName: string
@@ -10,10 +11,10 @@ type MyRecipesPageProps = {
 type RecipeRecord = {
   id: string
   slug?: string
-  recipe_data: Record<string, unknown>
+  recipe_data: unknown
 }
 
-type Recipe = RecipeRecord & {
+type RecipeView = RecipeRecord & {
   slug: string
   name: string
   description: string
@@ -26,50 +27,37 @@ type Recipe = RecipeRecord & {
   categories: string[]
 }
 
-const asString = (value: unknown) => (typeof value === 'string' ? value : '')
-
-const asStringArray = (value: unknown) => {
-  if (!Array.isArray(value)) return []
-  return value
-    .map((item) => (typeof item === 'string' ? item : typeof item === 'object' && item !== null && 'text' in item ? asString(item.text) : ''))
-    .filter(Boolean)
+const formatDuration = (value: unknown) => {
+  const minutes = durationInMinutes(value)
+  if (!minutes) return ''
+  const hours = Math.floor(minutes / 60)
+  const remainder = minutes % 60
+  return [hours ? `${hours}h` : '', remainder ? `${remainder}m` : ''].filter(Boolean).join(' ')
 }
 
-const parseDuration = (value: string) => {
-  const match = value.match(/^PT(?:(\d+)H)?(?:(\d+)M)?/i)
-  if (!match) return ''
-
-  const hours = Number(match[1] ?? 0)
-  const minutes = Number(match[2] ?? 0)
-  if (!hours && !minutes) return ''
-  return [hours ? `${hours}h` : '', minutes ? `${minutes}m` : ''].filter(Boolean).join(' ')
-}
-
-const normalizeRecipe = (record: RecipeRecord): Recipe => {
-  const data = record.recipe_data
-  const rawServings = data.recipeYield
-
-  const recipeName = asString(data.name) || 'Untitled recipe'
-  const slug = asString(record.slug) || recipeName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'recipe'
+const normalizeRecipe = (record: RecipeRecord): RecipeView => {
+  const data = normalizeStoredRecipe(record.recipe_data)
+  const recipeName = data.name || 'Untitled recipe'
+  const slug = (typeof record.slug === 'string' ? record.slug : '') || recipeName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'recipe'
 
   return {
     ...record,
     slug,
     name: recipeName,
-    description: asString(data.description),
-    servings: typeof rawServings === 'number' ? rawServings : Number.parseInt(asString(rawServings), 10) || 0,
-    prepTime: asString(data.prepTime),
-    cookTime: asString(data.cookTime),
-    totalTime: asString(data.totalTime),
-    ingredients: asStringArray(data.recipeIngredient),
-    instructions: asStringArray(data.recipeInstructions),
-    categories: asStringArray(data.recipeCategory),
+    description: data.description ?? '',
+    servings: data.recipeYield,
+    prepTime: data.prepTime,
+    cookTime: data.cookTime,
+    totalTime: data.totalTime,
+    ingredients: data.recipeIngredient,
+    instructions: data.recipeInstructions,
+    categories: data.recipeCategory ? [data.recipeCategory] : [],
   }
 }
 
-function RecipeRow({ recipe }: { recipe: Recipe }) {
+function RecipeRow({ recipe }: { recipe: RecipeView }) {
   const [isOpen, setIsOpen] = useState(false)
-  const time = parseDuration(recipe.totalTime) || [parseDuration(recipe.prepTime), parseDuration(recipe.cookTime)].filter(Boolean).join(' + ')
+  const time = formatDuration(recipe.totalTime) || [formatDuration(recipe.prepTime), formatDuration(recipe.cookTime)].filter(Boolean).join(' + ')
 
   return (
     <article className={isOpen ? 'recipe-row is-open' : 'recipe-row'}>
@@ -118,7 +106,7 @@ function RecipeRow({ recipe }: { recipe: Recipe }) {
 }
 
 export function MyRecipesPage({ userName, householdId: sharedHouseholdId, isPublic = false }: MyRecipesPageProps) {
-  const [recipes, setRecipes] = useState<Recipe[]>([])
+  const [recipes, setRecipes] = useState<RecipeView[]>([])
   const [currentHouseholdId, setCurrentHouseholdId] = useState(sharedHouseholdId ?? '')
   const [householdName, setHouseholdName] = useState('')
   const [search, setSearch] = useState('')

@@ -1,21 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-
-type RecipeCategory = 'meal' | 'side' | 'dessert' | 'drink'
-
-type BackendRecipeData = {
-  name: string
-  description?: string
-  sourceType?: string
-  sourceLink?: string
-  recipeYield: number
-  prepTime: string
-  cookTime: string
-  totalTime: string
-  recipeIngredient: string[]
-  recipeInstructions: string[]
-  recipeCategory?: RecipeCategory
-}
+import { durationInMinutes, normalizeRecipeCategory, normalizeStoredRecipe, type RecipeCategory } from '../lib/recipeSchema'
 
 type RecipeRecord = {
   id: string
@@ -23,7 +8,7 @@ type RecipeRecord = {
   recipe_name: string | null
   recipe_category: string | null
   created_at: string | null
-  recipe_data: BackendRecipeData | Record<string, unknown>
+  recipe_data: unknown
 }
 
 type BrowseRecipe = {
@@ -53,74 +38,35 @@ const categoryOptions: { value: CategoryFilter; label: string }[] = [
   { value: 'drink', label: 'Drinks' },
 ]
 
-const asString = (value: unknown) => (typeof value === 'string' ? value : '')
-
-const asStringArray = (value: unknown): string[] => {
-  const values = Array.isArray(value) ? value : typeof value === 'string' ? [value] : []
-  return values
-    .map((item) => {
-      if (typeof item === 'string') return item
-      if (item && typeof item === 'object' && 'text' in item) return asString(item.text)
-      if (item && typeof item === 'object' && 'name' in item) return asString(item.name)
-      return ''
-    })
-    .filter(Boolean)
-}
-
-const durationInMinutes = (value: unknown) => {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  const text = asString(value).trim()
-  if (!text) return 0
-
-  const iso = text.match(/^PT(?:(\d+)H)?(?:(\d+)M)?$/i)
-  if (iso) return Number(iso[1] ?? 0) * 60 + Number(iso[2] ?? 0)
-
-  const hours = text.match(/(\d+)\s*h/i)
-  const minutes = text.match(/(\d+)\s*m/i)
-  if (hours || minutes) return Number(hours?.[1] ?? 0) * 60 + Number(minutes?.[1] ?? 0)
-  return Number.parseInt(text, 10) || 0
-}
-
 const normalizeRecipe = (record: RecipeRecord): BrowseRecipe => {
-  const data = record.recipe_data ?? {}
-  const legacyData = data as Record<string, unknown>
-  const prepMinutes = durationInMinutes(data.prepTime ?? legacyData.prep_time)
-  const cookMinutes = durationInMinutes(data.cookTime ?? legacyData.cook_time)
-  const explicitTotal = durationInMinutes(data.totalTime ?? legacyData.total_time)
-  const servingsValue = data.recipeYield ?? legacyData.servings
-  const categories = asStringArray(data.recipeCategory)
-  const cuisines = asStringArray(legacyData.recipeCuisine)
-  const generatedCategory = record.recipe_category || categories[0] || 'meal'
-  let categoryValues = [generatedCategory]
-  if (categoryValues[0].startsWith('[')) {
-    try {
-      const parsedCategory: unknown = JSON.parse(categoryValues[0])
-      categoryValues = asStringArray(parsedCategory)
-    } catch {
-      categoryValues = ['meal']
-    }
-  }
-  const categoryText = [...categoryValues, ...categories, generatedCategory].join(' ').toLowerCase()
-  const category: RecipeCategory = /\bdessert\b|baked good/.test(categoryText)
-    ? 'dessert'
-    : /\bside\b/.test(categoryText)
-      ? 'side'
-      : /\bdrink\b|\bbeverage\b/.test(categoryText)
-        ? 'drink'
-        : 'meal'
+  const data = normalizeStoredRecipe(record.recipe_data)
+  const recordCategory = record.recipe_category?.startsWith('[')
+    ? (() => {
+      try {
+        return normalizeRecipeCategory(JSON.parse(record.recipe_category))
+      } catch {
+        return undefined
+      }
+    })()
+    : normalizeRecipeCategory(record.recipe_category)
+  const category = recordCategory ?? data.recipeCategory ?? 'meal'
+  const categories = data.recipeCategory ? [data.recipeCategory] : []
+  const prepMinutes = durationInMinutes(data.prepTime)
+  const cookMinutes = durationInMinutes(data.cookTime)
+  const explicitTotal = durationInMinutes(data.totalTime)
 
   return {
     id: record.id,
     slug: record.slug,
-    name: record.recipe_name || asString(data.name) || 'Untitled recipe',
-    description: asString(data.description),
+    name: record.recipe_name || data.name || 'Untitled recipe',
+    description: data.description ?? '',
     category,
     categories,
-    ingredients: asStringArray(data.recipeIngredient),
-    servings: typeof servingsValue === 'number' ? servingsValue : Number.parseInt(asString(servingsValue), 10) || 0,
+    ingredients: data.recipeIngredient,
+    servings: data.recipeYield,
     totalMinutes: explicitTotal || prepMinutes + cookMinutes,
     createdAt: record.created_at ?? '',
-    searchTerms: [...categories, ...cuisines],
+    searchTerms: categories,
   }
 }
 

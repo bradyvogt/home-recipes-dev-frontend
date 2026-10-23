@@ -1,32 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-
-type RecipeData = {
-  name?: string
-  title?: string
-  description?: string
-  sourceType?: string
-  sourceLink?: string
-  source_type?: string
-  source_link?: string
-  recipeYield?: number | string
-  servings?: number | string
-  prepTime?: string | number
-  prep_time?: string | number
-  cookTime?: string | number
-  cook_time?: string | number
-  totalTime?: string | number
-  total_time?: string | number
-  recipeCategory?: unknown[] | string[] | string
-  recipeCuisine?: unknown[] | string[] | string
-  recipeIngredient?: unknown[] | string[] | string
-  recipeInstructions?: unknown[] | string[] | string
-}
+import { durationFromMinutes, durationInMinutes, normalizeStoredRecipe, RecipeCategorySchema, RecipeSchema, type Recipe } from '../lib/recipeSchema'
 
 type RecipeRecord = {
   id: string
   slug: string
-  recipe_data: RecipeData
+  recipe_data: Recipe
 }
 
 type EditValues = {
@@ -39,7 +18,6 @@ type EditValues = {
   cookTime: string
   totalTime: string
   recipeCategory: string
-  recipeCuisine: string
   recipeIngredient: string
   recipeInstructions: string
 }
@@ -96,24 +74,6 @@ const normalizeListText = (value: unknown): string => {
   return asString(value)
 }
 
-const parseMinutesValue = (value: unknown): number => {
-  if (value === null || value === undefined || value === '') return 0
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string') {
-    const trimmed = value.trim()
-    if (!trimmed) return 0
-    if (/^\d+$/.test(trimmed)) return Number(trimmed)
-    const match = trimmed.match(/(?:(\d+)\s*h(?:ours?)?)?(?:\s*)?(?:(\d+)\s*m(?:in(?:utes?)?)?)?/i)
-    if (match) {
-      const hours = Number(match[1] ?? 0)
-      const minutes = Number(match[2] ?? 0)
-      return hours * 60 + minutes
-    }
-    return 0
-  }
-  return 0
-}
-
 const formatDurationText = (minutes: number) => {
   if (!Number.isFinite(minutes) || minutes <= 0) return ''
   const hours = Math.floor(minutes / 60)
@@ -123,34 +83,22 @@ const formatDurationText = (minutes: number) => {
   return `${remainder}m`
 }
 
-const serializeDuration = (value: string | number) => {
-  const minutes = typeof value === 'number' ? value : Number(value)
-  if (!Number.isFinite(minutes) || minutes < 0) return ''
-  const hours = Math.floor(minutes / 60)
-  const remainder = minutes % 60
-  let iso = 'PT'
-  if (hours) iso += `${hours}H`
-  if (remainder) iso += `${remainder}M`
-  return iso || 'PT0M'
-}
-
-const buildEditValues = (recipe: RecipeData): EditValues => ({
-  name: recipe.name ?? recipe.title ?? '',
+const buildEditValues = (recipe: Recipe): EditValues => ({
+  name: recipe.name,
   description: recipe.description ?? '',
-  sourceType: recipe.sourceType ?? recipe.source_type ?? '',
-  sourceLink: recipe.sourceLink ?? recipe.source_link ?? '',
-  recipeYield: recipe.recipeYield !== undefined ? String(recipe.recipeYield) : recipe.servings !== undefined ? String(recipe.servings) : '',
-  prepTime: String(parseMinutesValue(recipe.prepTime ?? recipe.prep_time ?? 0)),
-  cookTime: String(parseMinutesValue(recipe.cookTime ?? recipe.cook_time ?? 0)),
-  totalTime: String(parseMinutesValue(recipe.totalTime ?? recipe.total_time ?? 0)),
-  recipeCategory: normalizeListText(recipe.recipeCategory ?? []),
-  recipeCuisine: normalizeListText(recipe.recipeCuisine ?? []),
+  sourceType: recipe.sourceType ?? '',
+  sourceLink: recipe.sourceLink ?? '',
+  recipeYield: String(recipe.recipeYield),
+  prepTime: String(durationInMinutes(recipe.prepTime)),
+  cookTime: String(durationInMinutes(recipe.cookTime)),
+  totalTime: String(durationInMinutes(recipe.totalTime)),
+  recipeCategory: recipe.recipeCategory ?? '',
   recipeIngredient: normalizeListText(recipe.recipeIngredient ?? []),
   recipeInstructions: normalizeListText(recipe.recipeInstructions ?? []),
 })
 
 export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
-  const [recipe, setRecipe] = useState<RecipeData | null>(null)
+  const [recipe, setRecipe] = useState<Recipe | null>(null)
   const [recipeMeta, setRecipeMeta] = useState<Pick<RecipeRecord, 'id' | 'slug'> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -166,7 +114,6 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
     cookTime: '',
     totalTime: '',
     recipeCategory: '',
-    recipeCuisine: '',
     recipeIngredient: '',
     recipeInstructions: '',
   })
@@ -197,7 +144,7 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
       }
 
       if (isMounted) {
-        const normalizedRecipe = data.recipe_data as RecipeData
+        const normalizedRecipe = normalizeStoredRecipe(data.recipe_data)
         setRecipeMeta({ id: data.id, slug: data.slug })
         setRecipe(normalizedRecipe)
         setEditValues(buildEditValues(normalizedRecipe))
@@ -223,24 +170,20 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
 
   const recipeName = useMemo(() => {
     if (!recipe) return 'Recipe'
-    return recipe.name ?? recipe.title ?? 'Untitled recipe'
+    return recipe.name || 'Untitled recipe'
   }, [recipe])
 
   const recipeIngredients = useMemo(() => asStringArray(recipe?.recipeIngredient ?? []), [recipe])
   const recipeInstructions = useMemo(() => asStringArray(recipe?.recipeInstructions ?? []), [recipe])
-  const recipeCategories = useMemo(() => asStringArray(recipe?.recipeCategory ?? []), [recipe])
-  const recipeCuisines = useMemo(() => asStringArray(recipe?.recipeCuisine ?? []), [recipe])
-  const prepMinutes = useMemo(() => parseMinutesValue(recipe?.prepTime ?? recipe?.prep_time ?? 0), [recipe])
-  const cookMinutes = useMemo(() => parseMinutesValue(recipe?.cookTime ?? recipe?.cook_time ?? 0), [recipe])
-  const totalMinutes = useMemo(() => parseMinutesValue(recipe?.totalTime ?? recipe?.total_time ?? 0), [recipe])
+  const recipeCategories = useMemo(() => recipe?.recipeCategory ? [recipe.recipeCategory] : [], [recipe])
+  const prepMinutes = useMemo(() => durationInMinutes(recipe?.prepTime), [recipe])
+  const cookMinutes = useMemo(() => durationInMinutes(recipe?.cookTime), [recipe])
+  const totalMinutes = useMemo(() => durationInMinutes(recipe?.totalTime), [recipe])
   const servings = useMemo(() => {
-    const value = recipe?.recipeYield ?? recipe?.servings
-    if (typeof value === 'number') return value
-    if (typeof value === 'string' && value.trim()) return Number.parseInt(value, 10) || 0
-    return 0
+    return recipe?.recipeYield ?? 0
   }, [recipe])
 
-  const handleEditField = (field: keyof EditValues) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleEditField = (field: keyof EditValues) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setEditValues((current) => ({ ...current, [field]: event.target.value }))
   }
 
@@ -269,20 +212,23 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
       if (sessionError) throw sessionError
       if (!sessionData.session?.access_token) throw new Error('Please sign in to edit a recipe.')
 
-      const payload = {
+      const validation = RecipeSchema.safeParse({
         name: editValues.name.trim() || recipeName,
         description: editValues.description.trim(),
         sourceType: editValues.sourceType.trim(),
         sourceLink: editValues.sourceLink.trim(),
-        recipeYield: editValues.recipeYield ? Number(editValues.recipeYield) : undefined,
-        prepTime: serializeDuration(editValues.prepTime || 0),
-        cookTime: serializeDuration(editValues.cookTime || 0),
-        totalTime: serializeDuration(editValues.totalTime || 0),
-        recipeCategory: editValues.recipeCategory.split(/\r?\n|,/).map((entry) => entry.trim()).filter(Boolean),
-        recipeCuisine: editValues.recipeCuisine.split(/\r?\n|,/).map((entry) => entry.trim()).filter(Boolean),
+        recipeYield: Number(editValues.recipeYield),
+        prepTime: durationFromMinutes(editValues.prepTime || 0),
+        cookTime: durationFromMinutes(editValues.cookTime || 0),
+        totalTime: durationFromMinutes(editValues.totalTime || 0),
+        recipeCategory: editValues.recipeCategory || undefined,
         recipeIngredient: editValues.recipeIngredient.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean),
         recipeInstructions: editValues.recipeInstructions.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean),
+      })
+      if (!validation.success) {
+        throw new Error(validation.error.issues.map((issue) => `${issue.path.join('.') || 'Recipe'}: ${issue.message}`).join(' '))
       }
+      const payload = validation.data
 
       const { data: updatedRecord, error: updateError } = await supabase
         .from('recipes')
@@ -293,7 +239,7 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
 
       if (updateError) throw updateError
 
-      const updatedRecipe = updatedRecord.recipe_data as RecipeData
+      const updatedRecipe = normalizeStoredRecipe(updatedRecord.recipe_data)
       setRecipeMeta({ id: updatedRecord.id, slug: updatedRecord.slug })
       setRecipe(updatedRecipe)
       setEditValues(buildEditValues(updatedRecipe))
@@ -338,7 +284,7 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
         throw new Error(json?.error ?? 'Unable to apply the freeform recipe update.')
       }
 
-      const updatedRecipe = (json?.recipe ?? recipe ?? {}) as RecipeData
+      const updatedRecipe = normalizeStoredRecipe(json?.recipe ?? recipe ?? {})
       setRecipe(updatedRecipe)
       setEditValues(buildEditValues(updatedRecipe))
       setDescribeMode(false)
@@ -408,13 +354,13 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
 
       {saveState ? <div className={saveState.type === 'success' ? 'status success' : 'status error'}>{saveState.message}</div> : null}
 
-      {(recipe.description || recipe.sourceType || recipe.sourceLink || recipe.source_type || recipe.source_link) ? (
+      {(recipe.description || recipe.sourceType || recipe.sourceLink) ? (
         <div className="recipe-summary-card">
           {recipe.description ? <p className="recipe-summary-text">{recipe.description}</p> : null}
           <div className="recipe-source-row">
-            {recipe.sourceType || recipe.source_type ? <span className="recipe-source-badge">{recipe.sourceType ?? recipe.source_type}</span> : null}
-            {(recipe.sourceLink || recipe.source_link) ? (
-              <a href={recipe.sourceLink ?? recipe.source_link} target="_blank" rel="noreferrer" className="recipe-source-link">
+            {recipe.sourceType ? <span className="recipe-source-badge">{recipe.sourceType}</span> : null}
+            {recipe.sourceLink ? (
+              <a href={recipe.sourceLink} target="_blank" rel="noreferrer" className="recipe-source-link">
                 View source
               </a>
             ) : null}
@@ -422,14 +368,13 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
         </div>
       ) : null}
 
-      {servings || prepMinutes || cookMinutes || totalMinutes || recipeCategories.length || recipeCuisines.length ? (
+      {servings || prepMinutes || cookMinutes || totalMinutes || recipeCategories.length ? (
         <div className="recipe-detail-metrics">
           {servings ? <div className="metric-card"><span>Servings</span><strong>{servings}</strong></div> : null}
           {prepMinutes ? <div className="metric-card"><span>Prep Time</span><strong>{formatDurationText(prepMinutes)}</strong></div> : null}
           {cookMinutes ? <div className="metric-card"><span>Cook Time</span><strong>{formatDurationText(cookMinutes)}</strong></div> : null}
           {totalMinutes ? <div className="metric-card"><span>Total Time</span><strong>{formatDurationText(totalMinutes)}</strong></div> : null}
           {recipeCategories.length ? <div className="metric-card wide"><span>Categories</span><strong>{recipeCategories.join(', ')}</strong></div> : null}
-          {recipeCuisines.length ? <div className="metric-card wide"><span>Cuisine</span><strong>{recipeCuisines.join(', ')}</strong></div> : null}
         </div>
       ) : null}
 
@@ -488,12 +433,11 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
               <input className="input-field" type="number" min="0" value={editValues.totalTime} onChange={handleEditField('totalTime')} />
             </label>
             <label className="field-group full-width">
-              <span>Categories</span>
-              <input className="input-field" value={editValues.recipeCategory} onChange={handleEditField('recipeCategory')} />
-            </label>
-            <label className="field-group full-width">
-              <span>Cuisine</span>
-              <input className="input-field" value={editValues.recipeCuisine} onChange={handleEditField('recipeCuisine')} />
+              <span>Category</span>
+              <select className="input-field" value={editValues.recipeCategory} onChange={handleEditField('recipeCategory')}>
+                <option value="">No category</option>
+                {RecipeCategorySchema.options.map((category) => <option key={category} value={category}>{category}</option>)}
+              </select>
             </label>
             <label className="field-group full-width">
               <span>Ingredients (one per line)</span>
