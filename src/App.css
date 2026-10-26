@@ -681,6 +681,82 @@
   text-transform: uppercase;
 }
 
+.recipe-ingredients-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.recipe-ingredients-heading h3 {
+  margin: 0;
+}
+
+.ingredient-copy-control {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  border: 1px solid #e8cdb8;
+  border-radius: 6px;
+  background: #f6efe8;
+}
+
+.ingredient-copy-main,
+.ingredient-copy-toggle {
+  border: 0;
+  background: transparent;
+  color: #2d241f;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ingredient-copy-main {
+  padding: 0.5rem 0.7rem;
+}
+
+.ingredient-copy-toggle {
+  display: grid;
+  width: 34px;
+  place-items: center;
+  border-left: 1px solid #e8cdb8;
+}
+
+.ingredient-copy-main:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ingredient-copy-menu {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 5px);
+  right: 0;
+  display: grid;
+  min-width: 150px;
+  padding: 4px;
+  border: 1px solid #e8cdb8;
+  border-radius: 6px;
+  background: #fffaf5;
+  box-shadow: 0 8px 18px rgba(45, 36, 31, 0.14);
+}
+
+.ingredient-copy-menu button {
+  padding: 0.55rem 0.7rem;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: #2d241f;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ingredient-copy-menu button:hover {
+  background: #f6efe8;
+}
+
 .recipe-detail-columns ul,
 .recipe-detail-columns ol {
   display: grid;

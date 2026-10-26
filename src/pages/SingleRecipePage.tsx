@@ -28,6 +28,33 @@ type SingleRecipePageProps = {
 }
 
 const SUPABASE_FUNCTION_ROOT = 'https://bpcvnedueofvttcvnvel.supabase.co/functions/v1'
+const recipeLoadRequests = new Map<string, Promise<RecipeRecord>>()
+
+const loadRecipeRecord = (slug: string): Promise<RecipeRecord> => {
+  const pendingRequest = recipeLoadRequests.get(slug)
+  if (pendingRequest) return pendingRequest
+
+  const request = Promise.resolve(
+    supabase
+      .from('recipes')
+      .select('id, slug, recipe_data')
+      .eq('slug', slug)
+      .maybeSingle(),
+  )
+    .then(({ data, error }) => {
+      if (error) throw error
+      if (!data) throw new Error('Recipe not found.')
+      return data as unknown as RecipeRecord
+    })
+    .finally(() => {
+      if (recipeLoadRequests.get(slug) === request) {
+        recipeLoadRequests.delete(slug)
+      }
+    })
+
+  recipeLoadRequests.set(slug, request)
+  return request
+}
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '')
 
@@ -121,6 +148,7 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
   const [isSaving, setIsSaving] = useState(false)
   const [describeText, setDescribeText] = useState('')
   const [describeSaving, setDescribeSaving] = useState(false)
+  const [isIngredientCopyMenuOpen, setIsIngredientCopyMenuOpen] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -129,19 +157,7 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
       setLoading(true)
       setError(null)
 
-      const { data, error: recipeError } = await supabase
-        .from('recipes')
-        .select('id, slug, recipe_data')
-        .eq('slug', slug)
-        .maybeSingle()
-
-      if (recipeError) {
-        throw recipeError
-      }
-
-      if (!data) {
-        throw new Error('Recipe not found.')
-      }
+      const data = await loadRecipeRecord(slug)
 
       if (isMounted) {
         const normalizedRecipe = normalizeStoredRecipe(data.recipe_data)
@@ -199,6 +215,21 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
       }
     } catch {
       setSaveState({ type: 'success', message: `Copy this link to share it: ${url}` })
+    }
+  }
+
+  const copyIngredients = async () => {
+    setIsIngredientCopyMenuOpen(false)
+
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('Clipboard is unavailable in this browser.')
+      }
+
+      await navigator.clipboard.writeText(recipeIngredients.join('\n'))
+      setSaveState({ type: 'success', message: 'Ingredients copied to clipboard.' })
+    } catch {
+      setSaveState({ type: 'error', message: 'Unable to copy ingredients to the clipboard.' })
     }
   }
 
@@ -461,7 +492,30 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
 
       <div className="recipe-detail-columns">
         <section className="recipe-detail-card">
-          <h3>Ingredients</h3>
+          <div className="recipe-ingredients-heading">
+            <h3>Ingredients</h3>
+            <div className="ingredient-copy-control">
+              <button type="button" className="ingredient-copy-main" onClick={() => void copyIngredients()} disabled={!recipeIngredients.length}>
+                Copy
+              </button>
+              <button
+                type="button"
+                className="ingredient-copy-toggle"
+                aria-label="Choose ingredients to copy"
+                aria-haspopup="menu"
+                aria-expanded={isIngredientCopyMenuOpen}
+                onClick={() => setIsIngredientCopyMenuOpen((isOpen) => !isOpen)}
+              >
+                <span aria-hidden="true">▾</span>
+              </button>
+              {isIngredientCopyMenuOpen ? (
+                <div className="ingredient-copy-menu" role="menu">
+                  <button type="button" role="menuitem" onClick={() => void copyIngredients()}>Copy all</button>
+                  <button type="button" role="menuitem" onClick={() => void copyIngredients()}>Copy required</button>
+                </div>
+              ) : null}
+            </div>
+          </div>
           {recipeIngredients.length ? (
             <ul>{recipeIngredients.map((ingredient, index) => <li key={`${ingredient}-${index}`}>{ingredient}</li>)}</ul>
           ) : (
