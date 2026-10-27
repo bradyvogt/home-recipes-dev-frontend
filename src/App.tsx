@@ -9,14 +9,16 @@ import { PreferencesPage } from './pages/PreferencesPage'
 import { HouseholdPage } from './pages/HouseholdPage'
 import { SingleRecipePage } from './pages/SingleRecipePage'
 import { BrowseRecipesPage } from './pages/BrowseRecipesPage'
+import { GroceryListPage } from './pages/GroceryListPage'
 
-type PageKey = 'home' | 'browse' | 'my-recipes' | 'new-recipe' | 'preferences' | 'household' | 'recipe'
+type PageKey = 'home' | 'browse' | 'my-recipes' | 'new-recipe' | 'preferences' | 'household' | 'grocery-list' | 'recipe'
 
 const navItems = [
   { key: 'browse', label: 'Browse Recipes' },
   { key: 'my-recipes', label: 'My Recipes' },
   { key: 'preferences', label: 'Preferences' },
   { key: 'household', label: 'My Household' },
+  { key: 'grocery-list', label: 'Grocery List' },
   { key: 'home', label: 'Home / About' },
 ] as const
 
@@ -165,6 +167,7 @@ function App() {
         {pageToRender === 'new-recipe' ? <NewRecipePage session={session} onGoogleSignIn={handleGoogleSignIn} onRecipeAdded={handleRecipeAdded} /> : null}
         {pageToRender === 'preferences' ? <PreferencesPage /> : null}
         {pageToRender === 'household' ? <HouseholdPage /> : null}
+        {pageToRender === 'grocery-list' ? <GroceryListPage /> : null}
         {pageToRender === 'recipe' && currentRecipeSlug ? <SingleRecipePage slug={currentRecipeSlug} session={session} /> : null}
       </main>
     </div>
