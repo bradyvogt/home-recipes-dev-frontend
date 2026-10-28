@@ -7,16 +7,10 @@
     <script>
       (function () {
         const repoBase = '/home-recipes-dev-frontend';
-        const path = window.location.pathname.replace(/\/404\.html$/i, '');
-        const search = window.location.search || '';
-        const hash = window.location.hash || '';
-        const redirectPath = `${path}${search}${hash}`;
-
-        if (redirectPath && redirectPath !== `${repoBase}/`) {
-          window.location.replace(`${repoBase}/?p=${encodeURIComponent(redirectPath)}`);
-        } else {
-          window.location.replace(`${repoBase}/`);
-        }
+        const target = new URL(`${repoBase}/`, window.location.origin);
+        target.search = window.location.search;
+        target.hash = '/browse';
+        window.location.replace(target);
       })();
     </script>
   </head>

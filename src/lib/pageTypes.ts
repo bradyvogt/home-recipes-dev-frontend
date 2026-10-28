@@ -1,0 +1,1 @@
+export type PageKey = 'home' | 'browse' | 'my-recipes' | 'new-recipe' | 'preferences' | 'household' | 'grocery-list' | 'recipe'

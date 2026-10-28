@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPath, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 type HouseholdRecord = {
@@ -14,25 +15,39 @@ type ProfileRecord = {
 }
 
 export function HouseholdPage() {
+  const [searchParams] = useSearchParams()
+  const inviteCode = searchParams.get('code')?.trim() ?? ''
+
+  return <HouseholdPageContent key={inviteCode} />
+}
+
+function HouseholdPageContent() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [household, setHousehold] = useState<HouseholdRecord | null>(null)
   const [members, setMembers] = useState<ProfileRecord[]>([])
   const [householdName, setHouseholdName] = useState('')
   const [isEditingName, setIsEditingName] = useState(false)
-  const [switchCode, setSwitchCode] = useState('')
-  const [pendingSwitchCode, setPendingSwitchCode] = useState<string | null>(null)
+  const [switchCode, setSwitchCode] = useState(() => searchParams.get('code')?.trim() ?? '')
+  const [pendingSwitchCode, setPendingSwitchCode] = useState<string | null>(() => searchParams.get('code')?.trim() || null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isSwitching, setIsSwitching] = useState(false)
   const [message, setMessage] = useState('')
   const [copiedField, setCopiedField] = useState<'code' | 'link' | null>(null)
 
-  const inviteLink = household ? `${window.location.origin}${window.location.pathname}?household=${household.invite_code}` : ''
+  const inviteLink = household
+    ? (() => {
+      const inviteUrl = new URL(import.meta.env.BASE_URL, window.location.origin)
+      inviteUrl.hash = createPath({ pathname: '/household', search: `?code=${encodeURIComponent(household.invite_code)}` })
+      return inviteUrl.toString()
+    })()
+    : ''
 
   const clearSwitchPrompt = () => {
     setPendingSwitchCode(null)
-    const nextUrl = new URL(window.location.href)
-    nextUrl.searchParams.delete('household')
-    window.history.replaceState({}, '', nextUrl)
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.delete('code')
+    setSearchParams(nextParams, { replace: true })
   }
 
   const loadHousehold = async () => {
@@ -75,16 +90,6 @@ export function HouseholdPage() {
 
   useEffect(() => {
     void loadHousehold()
-  }, [])
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const inviteFromLink = params.get('household')?.trim()
-
-    if (inviteFromLink) {
-      setSwitchCode(inviteFromLink)
-      setPendingSwitchCode(inviteFromLink)
-    }
   }, [])
 
   const handleSaveHouseholdName = async () => {

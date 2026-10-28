@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { durationInMinutes, normalizeStoredRecipe } from '../lib/recipeSchema'
+import { createPath, Link } from 'react-router-dom'
 
 type MyRecipesPageProps = {
   userName: string
@@ -82,7 +83,7 @@ function RecipeRow({ recipe }: { recipe: RecipeView }) {
         <div className="recipe-row-details">
           {recipe.categories.length ? <div className="recipe-tags">{recipe.categories.map((category) => <span key={category}>{category}</span>)}</div> : null}
           <div className="recipe-row-link-wrap">
-            <a className="recipe-open-link" href={`${import.meta.env.BASE_URL}recipe/${encodeURIComponent(recipe.slug)}`}>Open recipe</a>
+            <Link className="recipe-open-link" to={`/recipe/${encodeURIComponent(recipe.slug)}`}>Open recipe</Link>
           </div>
           <div className="recipe-detail-columns">
             {recipe.ingredients.length ? (
@@ -187,7 +188,8 @@ export function MyRecipesPage({ userName, householdId: sharedHouseholdId, isPubl
   const shareLink = useMemo(() => {
     if (currentHouseholdId && !isPublic) {
       const baseUrl = new URL(import.meta.env.BASE_URL, window.location.origin)
-      return new URL(`recipes?household=${encodeURIComponent(currentHouseholdId)}`, baseUrl).toString()
+      baseUrl.hash = createPath({ pathname: '/my-recipes', search: `?code=${encodeURIComponent(currentHouseholdId)}` })
+      return baseUrl.toString()
     }
     return ''
   }, [currentHouseholdId, isPublic])

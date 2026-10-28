@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Navigate, Route, Routes, useLocation, useNavigate, useSearchParams, useParams } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import './App.css'
 import { TopNav } from './components/TopNav'
@@ -10,8 +11,7 @@ import { HouseholdPage } from './pages/HouseholdPage'
 import { SingleRecipePage } from './pages/SingleRecipePage'
 import { BrowseRecipesPage } from './pages/BrowseRecipesPage'
 import { GroceryListPage } from './pages/GroceryListPage'
-
-type PageKey = 'home' | 'browse' | 'my-recipes' | 'new-recipe' | 'preferences' | 'household' | 'grocery-list' | 'recipe'
+import type { PageKey } from './lib/pageTypes'
 
 const navItems = [
   { key: 'browse', label: 'Browse Recipes' },
@@ -24,29 +24,14 @@ const navItems = [
 
 function App() {
   const [session, setSession] = useState<Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'] | null>(null)
-  const [activePage, setActivePage] = useState<PageKey>('home')
-  const [currentRecipeSlug, setCurrentRecipeSlug] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-
-  const readPathState = () => {
-    const basePrefix = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '')
-    const candidates = [window.location.pathname, new URLSearchParams(window.location.search).get('p') ?? '']
-
-    for (const candidate of candidates) {
-      if (!candidate) continue
-
-      const pathOnly = candidate.split('?')[0]
-      const normalized = decodeURIComponent(pathOnly).replace(basePrefix, '')
-      const match = normalized.match(/^\/recipe\/([^/]+)$/)
-      if (match) {
-        setCurrentRecipeSlug(match[1])
-        setActivePage('recipe')
-        return
-      }
-    }
-
-    setCurrentRecipeSlug(null)
-  }
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const routeName = location.pathname.replace(/^\/+|\/+$/g, '')
+  const activePage = (routeName.startsWith('recipe/') ? 'recipe' : routeName || 'home') as PageKey
+  const sharedHouseholdId = searchParams.get('code')?.trim() || ''
+  const isSharedRecipesPage = activePage === 'my-recipes' && Boolean(sharedHouseholdId)
 
   useEffect(() => {
     const loadSession = async () => {
@@ -56,23 +41,17 @@ function App() {
     }
 
     void loadSession()
-    readPathState()
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession)
-      if (nextSession) {
-        setActivePage('my-recipes')
+      if (event === 'SIGNED_IN' && nextSession) {
+        navigate('/my-recipes', { replace: true })
       }
     })
 
-    const handleLocationChange = () => readPathState()
-    window.addEventListener('popstate', handleLocationChange)
-
     return () => {
       authListener.subscription.unsubscribe()
-      window.removeEventListener('popstate', handleLocationChange)
     }
-  }, [])
+  }, [navigate])
 
   const userName = useMemo(() => {
     const email = session?.user?.email ?? 'Guest'
@@ -92,24 +71,15 @@ function App() {
   }, [session])
 
   const handleLogoClick = () => {
-    setCurrentRecipeSlug(null)
-    setActivePage(session ? 'my-recipes' : 'home')
-    window.history.pushState({}, '', import.meta.env.BASE_URL || '/')
+    navigate(session ? '/my-recipes' : '/')
   }
 
   const handleRecipeAdded = (slug: string) => {
-    setCurrentRecipeSlug(slug)
-    setActivePage('recipe')
-    const recipePath = `${import.meta.env.BASE_URL || '/'}recipe/${encodeURIComponent(slug)}`
-    window.history.pushState({}, '', recipePath)
+    navigate(`/recipe/${encodeURIComponent(slug)}`)
   }
 
-  const handleNavigate = (page: PageKey) => {
-    setActivePage(page)
-    setCurrentRecipeSlug(null)
-    if (page !== 'recipe') {
-      window.history.pushState({}, '', import.meta.env.BASE_URL || '/')
-    }
+  const navigateToPage = (page: PageKey) => {
+    navigate(page === 'home' ? '/' : `/${page}`)
   }
 
   const handleGoogleSignIn = async () => {
@@ -132,13 +102,8 @@ function App() {
       console.error('Sign out failed:', error)
     }
 
-    setActivePage('home')
+    navigateToPage('home')
   }
-
-  const visiblePage = currentRecipeSlug ? 'recipe' : session || activePage === 'browse' ? activePage : 'home'
-  const sharedHouseholdId = new URLSearchParams(window.location.search).get('household')?.trim() || ''
-  const isSharedRecipesPage = window.location.pathname.endsWith('/recipes') && Boolean(sharedHouseholdId)
-  const pageToRender = currentRecipeSlug ? 'recipe' : isSharedRecipesPage ? 'my-recipes' : visiblePage
 
   if (isLoading) {
     return <div className="loading-state">Loading…</div>
@@ -151,27 +116,37 @@ function App() {
         activePage={activePage}
         navItems={navItems}
         initials={initials}
-        onNavigate={handleNavigate}
+        onNavigate={navigateToPage}
         onGoogleSignIn={handleGoogleSignIn}
         onSignOut={handleSignOut}
         onLogoClick={handleLogoClick}
       />
 
       <main className="content-shell">
-        {pageToRender === 'home' ? (
-          <HomePage session={session} onNavigate={setActivePage} onGoogleSignIn={handleGoogleSignIn} />
-        ) : null}
-
-        {pageToRender === 'browse' ? <BrowseRecipesPage /> : null}
-        {pageToRender === 'my-recipes' ? <MyRecipesPage userName={userName} householdId={sharedHouseholdId || undefined} isPublic={isSharedRecipesPage} /> : null}
-        {pageToRender === 'new-recipe' ? <NewRecipePage session={session} onGoogleSignIn={handleGoogleSignIn} onRecipeAdded={handleRecipeAdded} /> : null}
-        {pageToRender === 'preferences' ? <PreferencesPage /> : null}
-        {pageToRender === 'household' ? <HouseholdPage /> : null}
-        {pageToRender === 'grocery-list' ? <GroceryListPage /> : null}
-        {pageToRender === 'recipe' && currentRecipeSlug ? <SingleRecipePage slug={currentRecipeSlug} session={session} /> : null}
+        <Routes>
+          <Route path="/" element={<HomePage session={session} onNavigate={navigateToPage} onGoogleSignIn={handleGoogleSignIn} />} />
+          <Route path="/browse" element={<BrowseRecipesPage />} />
+          <Route
+            path="/my-recipes"
+            element={session || isSharedRecipesPage
+              ? <MyRecipesPage userName={userName} householdId={sharedHouseholdId || undefined} isPublic={isSharedRecipesPage} />
+              : <HomePage session={session} onNavigate={navigateToPage} onGoogleSignIn={handleGoogleSignIn} />}
+          />
+          <Route path="/new-recipe" element={<NewRecipePage session={session} onGoogleSignIn={handleGoogleSignIn} onRecipeAdded={handleRecipeAdded} />} />
+          <Route path="/preferences" element={session ? <PreferencesPage /> : <HomePage session={session} onNavigate={navigateToPage} onGoogleSignIn={handleGoogleSignIn} />} />
+          <Route path="/household" element={session ? <HouseholdPage /> : <HomePage session={session} onNavigate={navigateToPage} onGoogleSignIn={handleGoogleSignIn} />} />
+          <Route path="/grocery-list" element={session ? <GroceryListPage /> : <HomePage session={session} onNavigate={navigateToPage} onGoogleSignIn={handleGoogleSignIn} />} />
+          <Route path="/recipe/:slug" element={<RecipeRoute session={session} />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </main>
     </div>
   )
+}
+
+function RecipeRoute({ session }: { session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'] | null }) {
+  const { slug } = useParams()
+  return slug ? <SingleRecipePage slug={slug} session={session} /> : <Navigate to="/browse" replace />
 }
 
 export default App

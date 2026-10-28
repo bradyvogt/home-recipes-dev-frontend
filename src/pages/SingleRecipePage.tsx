@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { durationFromMinutes, durationInMinutes, normalizeStoredRecipe, RecipeCategorySchema, RecipeSchema, type Recipe } from '../lib/recipeSchema'
+import { useNavigate } from 'react-router-dom'
 
 type RecipeRecord = {
   id: string
@@ -125,6 +126,7 @@ const buildEditValues = (recipe: Recipe): EditValues => ({
 })
 
 export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
+  const navigate = useNavigate()
   const [recipe, setRecipe] = useState<Recipe | null>(null)
   const [recipeMeta, setRecipeMeta] = useState<Pick<RecipeRecord, 'id' | 'slug'> | null>(null)
   const [loading, setLoading] = useState(true)
@@ -274,8 +276,7 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
       setRecipeMeta({ id: updatedRecord.id, slug: updatedRecord.slug })
       setRecipe(updatedRecipe)
       setEditValues(buildEditValues(updatedRecipe))
-      const recipePath = `${import.meta.env.BASE_URL || '/'}recipe/${encodeURIComponent(updatedRecord.slug)}`
-      window.history.replaceState({}, '', recipePath)
+      navigate(`/recipe/${encodeURIComponent(updatedRecord.slug)}`, { replace: true })
       setEditMode(false)
       setSaveState({ type: 'success', message: 'Recipe updated successfully.' })
     } catch (saveError) {

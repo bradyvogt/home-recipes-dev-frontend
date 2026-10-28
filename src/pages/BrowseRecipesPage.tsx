@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { durationInMinutes, normalizeRecipeCategory, normalizeStoredRecipe, type RecipeCategory } from '../lib/recipeSchema'
+import { Link } from 'react-router-dom'
 
 type RecipeRecord = {
   id: string
@@ -229,7 +230,7 @@ export function BrowseRecipesPage() {
                 {recipe.servings ? <span>{recipe.servings} servings</span> : null}
               </div>
               <h2>
-                {recipe.slug ? <a href={`${import.meta.env.BASE_URL}recipe/${encodeURIComponent(recipe.slug)}`}>{recipe.name}</a> : recipe.name}
+                {recipe.slug ? <Link to={`/recipe/${encodeURIComponent(recipe.slug)}`}>{recipe.name}</Link> : recipe.name}
               </h2>
               {recipe.description ? <p>{recipe.description}</p> : null}
               {recipe.ingredients.length ? <div className="browse-ingredient-preview">{recipe.ingredients.slice(0, 3).join(' · ')}</div> : null}
