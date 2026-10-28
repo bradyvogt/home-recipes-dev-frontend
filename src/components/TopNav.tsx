@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 type PageKey = 'home' | 'browse' | 'my-recipes' | 'new-recipe' | 'preferences' | 'household' | 'grocery-list' | 'recipe'
 
@@ -24,6 +24,20 @@ export function TopNav({
   onLogoClick,
 }: TopNavProps) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const profileMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !profileMenuRef.current?.contains(event.target)) {
+        setMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [menuOpen])
 
   return (
     <header className="top-nav">
@@ -49,7 +63,7 @@ export function TopNav({
             Sign in with Google
           </button>
         ) : (
-          <div className="profile-menu-wrap">
+          <div className="profile-menu-wrap" ref={profileMenuRef}>
             <button
               type="button"
               className="profile-bubble"
