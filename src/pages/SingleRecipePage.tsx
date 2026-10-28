@@ -151,6 +151,7 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
   const [describeText, setDescribeText] = useState('')
   const [describeSaving, setDescribeSaving] = useState(false)
   const [isIngredientCopyMenuOpen, setIsIngredientCopyMenuOpen] = useState(false)
+  const [isAddingIngredientsToList, setIsAddingIngredientsToList] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -232,6 +233,37 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
       setSaveState({ type: 'success', message: 'Ingredients copied to clipboard.' })
     } catch {
       setSaveState({ type: 'error', message: 'Unable to copy ingredients to the clipboard.' })
+    }
+  }
+
+  const addIngredientsToGroceryList = async () => {
+    setIsIngredientCopyMenuOpen(false)
+    if (!session) {
+      setSaveState({ type: 'error', message: 'Please sign in to use your household grocery list.' })
+      return
+    }
+
+    setIsAddingIngredientsToList(true)
+    setSaveState(null)
+
+    try {
+      const { data: householdId, error: householdError } = await supabase.rpc('get_my_household_id')
+      if (householdError) throw householdError
+      if (!householdId) throw new Error('Join or create a household before adding ingredients to its grocery list.')
+
+      const { error } = await supabase
+        .from('grocery_items')
+        .insert(recipeIngredients.map((name) => ({ household_id: householdId, name })))
+
+      if (error) throw error
+      setSaveState({ type: 'success', message: 'Ingredients added to your grocery list.' })
+    } catch (addError) {
+      setSaveState({
+        type: 'error',
+        message: addError instanceof Error ? addError.message : 'Unable to add ingredients to the grocery list.',
+      })
+    } finally {
+      setIsAddingIngredientsToList(false)
     }
   }
 
@@ -502,7 +534,7 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
               <button
                 type="button"
                 className="ingredient-copy-toggle"
-                aria-label="Choose ingredients to copy"
+                aria-label="Ingredient actions"
                 aria-haspopup="menu"
                 aria-expanded={isIngredientCopyMenuOpen}
                 onClick={() => setIsIngredientCopyMenuOpen((isOpen) => !isOpen)}
@@ -513,6 +545,14 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
                 <div className="ingredient-copy-menu" role="menu">
                   <button type="button" role="menuitem" onClick={() => void copyIngredients()}>Copy all</button>
                   <button type="button" role="menuitem" onClick={() => void copyIngredients()}>Copy required</button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => void addIngredientsToGroceryList()}
+                    disabled={!recipeIngredients.length || isAddingIngredientsToList}
+                  >
+                    {isAddingIngredientsToList ? 'Adding…' : 'Add to grocery list'}
+                  </button>
                 </div>
               ) : null}
             </div>
