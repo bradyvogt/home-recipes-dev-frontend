@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPath, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { Toast } from '../components/Toast'
 
 type HouseholdRecord = {
   id: string
@@ -181,6 +182,7 @@ function HouseholdPageContent() {
 
   return (
     <section className="page-card">
+      {message ? <Toast message={message} onDismiss={() => setMessage('')} /> : null}
       <div className="page-header">
         <div>
           <div className="eyebrow">My household</div>
@@ -231,7 +233,6 @@ function HouseholdPageContent() {
                 )}
               </div>
 
-              {message ? <div className="status-message">{message}</div> : null}
           </div>
 
           <div className="household-card">

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
+import { Toast } from '../components/Toast'
 
 type RecipeMethod = 'url' | 'image' | 'describe'
 
@@ -317,7 +318,7 @@ export function NewRecipePage({ session, onGoogleSignIn, onRecipeAdded }: NewRec
             </div>
           ) : null}
 
-          {feedback ? <div className={feedback.type === 'success' ? 'status success' : 'status error'}>{feedback.message}</div> : null}
+          {feedback ? <Toast message={feedback.message} type={feedback.type} onDismiss={() => setFeedback(null)} /> : null}
 
           <div className="submit-row">
             <button type="submit" className="primary-button" disabled={isSubmitting}>

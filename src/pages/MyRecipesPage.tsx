@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { durationInMinutes, normalizeStoredRecipe } from '../lib/recipeSchema'
 import { createPath, Link } from 'react-router-dom'
+import { Toast } from '../components/Toast'
 
 type MyRecipesPageProps = {
   userName: string
@@ -20,9 +21,7 @@ type RecipeView = RecipeRecord & {
   name: string
   description: string
   servings: number
-  prepTime: string
-  cookTime: string
-  totalTime: string
+  totalMinutes: number
   ingredients: string[]
   instructions: string[]
   categories: string[]
@@ -47,9 +46,7 @@ const normalizeRecipe = (record: RecipeRecord): RecipeView => {
     name: recipeName,
     description: data.description ?? '',
     servings: data.recipeYield,
-    prepTime: data.prepTime,
-    cookTime: data.cookTime,
-    totalTime: data.totalTime,
+    totalMinutes: durationInMinutes(data.prepTime) + durationInMinutes(data.cookTime),
     ingredients: data.recipeIngredient,
     instructions: data.recipeInstructions,
     categories: data.recipeCategory ? [data.recipeCategory] : [],
@@ -58,7 +55,7 @@ const normalizeRecipe = (record: RecipeRecord): RecipeView => {
 
 function RecipeRow({ recipe }: { recipe: RecipeView }) {
   const [isOpen, setIsOpen] = useState(false)
-  const time = formatDuration(recipe.totalTime) || [formatDuration(recipe.prepTime), formatDuration(recipe.cookTime)].filter(Boolean).join(' + ')
+  const time = formatDuration(recipe.totalMinutes)
 
   return (
     <article className={isOpen ? 'recipe-row is-open' : 'recipe-row'}>
@@ -81,7 +78,7 @@ function RecipeRow({ recipe }: { recipe: RecipeView }) {
 
       {isOpen ? (
         <div className="recipe-row-details">
-          {recipe.categories.length ? <div className="recipe-tags">{recipe.categories.map((category) => <span key={category}>{category}</span>)}</div> : null}
+          {recipe.categories.length ? <div className="recipe-tags">{recipe.categories.map((category) => <span className={`recipe-category-tag category-${category}`} key={category}>{category[0].toUpperCase() + category.slice(1)}</span>)}</div> : null}
           <div className="recipe-row-link-wrap">
             <Link className="recipe-open-link" to={`/recipe/${encodeURIComponent(recipe.slug)}`}>Open recipe</Link>
           </div>
@@ -204,11 +201,20 @@ export function MyRecipesPage({ userName, householdId: sharedHouseholdId, isPubl
       setShareMessage(shareLink)
     }
 
-    window.setTimeout(() => setShareMessage(''), 2500)
   }
 
   return (
     <section className="page-card my-recipes-page">
+      {error || shareMessage ? (
+        <Toast
+          message={error ?? shareMessage}
+          type={error ? 'error' : 'success'}
+          onDismiss={() => {
+            setError(null)
+            setShareMessage('')
+          }}
+        />
+      ) : null}
       <div className="page-header">
         <div>
           <div className="eyebrow">My recipes</div>
@@ -228,8 +234,6 @@ export function MyRecipesPage({ userName, householdId: sharedHouseholdId, isPubl
       </label>
 
       {isLoading ? <div className="recipe-state">Loading your household recipes...</div> : null}
-      {error ? <div className="status error">{error}</div> : null}
-      {shareMessage ? <div className="status success share-message">{shareMessage}</div> : null}
       {!isLoading && !error && !recipes.length ? <div className="recipe-state"><strong>Your kitchen is ready for its first recipe.</strong><span>Add one from New Recipe to see it here.</span></div> : null}
       {!isLoading && !error && recipes.length > 0 && !filteredRecipes.length ? <div className="recipe-state"><strong>No recipes found.</strong><span>Try a different title.</span></div> : null}
       <div className="recipe-list">{filteredRecipes.map((recipe) => <RecipeRow key={recipe.id} recipe={recipe} />)}</div>

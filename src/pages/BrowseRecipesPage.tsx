@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { durationInMinutes, normalizeRecipeCategory, normalizeStoredRecipe, type RecipeCategory } from '../lib/recipeSchema'
 import { Link } from 'react-router-dom'
+import { Toast } from '../components/Toast'
 
 type RecipeRecord = {
   id: string
@@ -54,7 +55,6 @@ const normalizeRecipe = (record: RecipeRecord): BrowseRecipe => {
   const categories = data.recipeCategory ? [data.recipeCategory] : []
   const prepMinutes = durationInMinutes(data.prepTime)
   const cookMinutes = durationInMinutes(data.cookTime)
-  const explicitTotal = durationInMinutes(data.totalTime)
 
   return {
     id: record.id,
@@ -65,7 +65,7 @@ const normalizeRecipe = (record: RecipeRecord): BrowseRecipe => {
     categories,
     ingredients: data.recipeIngredient,
     servings: data.recipeYield,
-    totalMinutes: explicitTotal || prepMinutes + cookMinutes,
+    totalMinutes: prepMinutes + cookMinutes,
     createdAt: record.created_at ?? '',
     searchTerms: categories,
   }
@@ -183,7 +183,7 @@ export function BrowseRecipesPage() {
             <button
               key={option.value}
               type="button"
-              className={category === option.value ? 'browse-category active' : 'browse-category'}
+              className={`browse-category${option.value !== 'all' ? ` category-${option.value}` : ''}${category === option.value ? ' active' : ''}`}
               aria-pressed={category === option.value}
               onClick={() => setCategory(option.value)}
             >
@@ -215,7 +215,7 @@ export function BrowseRecipesPage() {
       </div>
 
       {isLoading ? <div className="recipe-state">Loading public recipes...</div> : null}
-      {error ? <div className="status error">{error}</div> : null}
+      {error ? <Toast message={error} type="error" onDismiss={() => setError(null)} /> : null}
       {!isLoading && !error && !recipes.length ? <div className="recipe-state"><strong>No public recipes yet.</strong><span>Recipes shared by their households will appear here.</span></div> : null}
       {!isLoading && !error && recipes.length > 0 && !filteredRecipes.length ? <div className="recipe-state"><strong>No recipes match those filters.</strong><span>Try a different search or clear a filter.</span></div> : null}
 
@@ -225,7 +225,7 @@ export function BrowseRecipesPage() {
             <div className={`browse-category-mark category-${recipe.category}`} aria-hidden="true" />
             <div className="browse-recipe-content">
               <div className="browse-recipe-labels">
-                <span className={`browse-recipe-category category-${recipe.category}`}>{recipe.category}</span>
+                <span className={`browse-recipe-category category-${recipe.category}`}>{recipe.category[0].toUpperCase() + recipe.category.slice(1)}</span>
                 {formatDuration(recipe.totalMinutes) ? <span>{formatDuration(recipe.totalMinutes)}</span> : null}
                 {recipe.servings ? <span>{recipe.servings} servings</span> : null}
               </div>

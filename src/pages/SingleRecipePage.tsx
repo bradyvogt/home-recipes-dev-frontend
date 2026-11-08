@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { durationFromMinutes, durationInMinutes, normalizeStoredRecipe, RecipeCategorySchema, RecipeSchema, type Recipe } from '../lib/recipeSchema'
 import { useNavigate } from 'react-router-dom'
+import { Toast } from '../components/Toast'
 
 type RecipeRecord = {
   id: string
   slug: string
+  household_id: string | null
   recipe_data: Recipe
 }
 
@@ -17,7 +19,6 @@ type EditValues = {
   recipeYield: string
   prepTime: string
   cookTime: string
-  totalTime: string
   recipeCategory: string
   recipeIngredient: string
   recipeInstructions: string
@@ -38,7 +39,7 @@ const loadRecipeRecord = (slug: string): Promise<RecipeRecord> => {
   const request = Promise.resolve(
     supabase
       .from('recipes')
-      .select('id, slug, recipe_data')
+      .select('id, slug, household_id, recipe_data')
       .eq('slug', slug)
       .maybeSingle(),
   )
@@ -119,7 +120,6 @@ const buildEditValues = (recipe: Recipe): EditValues => ({
   recipeYield: String(recipe.recipeYield),
   prepTime: String(durationInMinutes(recipe.prepTime)),
   cookTime: String(durationInMinutes(recipe.cookTime)),
-  totalTime: String(durationInMinutes(recipe.totalTime)),
   recipeCategory: recipe.recipeCategory ?? '',
   recipeIngredient: normalizeListText(recipe.recipeIngredient ?? []),
   recipeInstructions: normalizeListText(recipe.recipeInstructions ?? []),
@@ -129,6 +129,7 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
   const navigate = useNavigate()
   const [recipe, setRecipe] = useState<Recipe | null>(null)
   const [recipeMeta, setRecipeMeta] = useState<Pick<RecipeRecord, 'id' | 'slug'> | null>(null)
+  const [isHouseholdRecipe, setIsHouseholdRecipe] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editMode, setEditMode] = useState(false)
@@ -141,7 +142,6 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
     recipeYield: '',
     prepTime: '',
     cookTime: '',
-    totalTime: '',
     recipeCategory: '',
     recipeIngredient: '',
     recipeInstructions: '',
@@ -159,14 +159,22 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
     const loadRecipe = async () => {
       setLoading(true)
       setError(null)
+      setIsHouseholdRecipe(false)
 
       const data = await loadRecipeRecord(slug)
+      let householdId: string | null = null
+      if (session) {
+        const { data: currentHouseholdId, error: householdError } = await supabase.rpc('get_my_household_id')
+        if (householdError) throw householdError
+        householdId = currentHouseholdId
+      }
 
       if (isMounted) {
         const normalizedRecipe = normalizeStoredRecipe(data.recipe_data)
         setRecipeMeta({ id: data.id, slug: data.slug })
         setRecipe(normalizedRecipe)
         setEditValues(buildEditValues(normalizedRecipe))
+        setIsHouseholdRecipe(Boolean(householdId && data.household_id === householdId))
       }
     }
 
@@ -185,7 +193,7 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
     return () => {
       isMounted = false
     }
-  }, [slug])
+  }, [slug, session])
 
   const recipeName = useMemo(() => {
     if (!recipe) return 'Recipe'
@@ -194,10 +202,12 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
 
   const recipeIngredients = useMemo(() => asStringArray(recipe?.recipeIngredient ?? []), [recipe])
   const recipeInstructions = useMemo(() => asStringArray(recipe?.recipeInstructions ?? []), [recipe])
-  const recipeCategories = useMemo(() => recipe?.recipeCategory ? [recipe.recipeCategory] : [], [recipe])
+  const recipeCategory = recipe?.recipeCategory
   const prepMinutes = useMemo(() => durationInMinutes(recipe?.prepTime), [recipe])
   const cookMinutes = useMemo(() => durationInMinutes(recipe?.cookTime), [recipe])
-  const totalMinutes = useMemo(() => durationInMinutes(recipe?.totalTime), [recipe])
+  const displayedPrepMinutes = editMode ? durationInMinutes(editValues.prepTime) : prepMinutes
+  const displayedCookMinutes = editMode ? durationInMinutes(editValues.cookTime) : cookMinutes
+  const totalMinutes = displayedPrepMinutes + displayedCookMinutes
   const servings = useMemo(() => {
     return recipe?.recipeYield ?? 0
   }, [recipe])
@@ -285,7 +295,6 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
         recipeYield: Number(editValues.recipeYield),
         prepTime: durationFromMinutes(editValues.prepTime || 0),
         cookTime: durationFromMinutes(editValues.cookTime || 0),
-        totalTime: durationFromMinutes(editValues.totalTime || 0),
         recipeCategory: editValues.recipeCategory || undefined,
         recipeIngredient: editValues.recipeIngredient.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean),
         recipeInstructions: editValues.recipeInstructions.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean),
@@ -365,80 +374,129 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
     return <section className="page-card recipe-detail-page"><div className="recipe-state">Loading recipe details…</div></section>
   }
 
-  if (error || !recipe) {
+  if (error) {
     return (
       <section className="page-card recipe-detail-page">
-        <div className="status error">{error ?? 'Recipe not found.'}</div>
+        <Toast message={error} type="error" onDismiss={() => setError(null)} />
       </section>
     )
   }
 
+  if (!recipe) {
+    return <section className="page-card recipe-detail-page"><div className="recipe-state">Recipe details are unavailable.</div></section>
+  }
+
   return (
-    <section className="page-card recipe-detail-page">
+    <section className={editMode ? 'page-card recipe-detail-page is-editing' : 'page-card recipe-detail-page'}>
       <div className="recipe-detail-header">
         <div>
-          <div className="eyebrow">Recipe</div>
-          <h2>{recipeName}</h2>
+          <div className={`recipe-category-label category-${recipeCategory || editValues.recipeCategory || 'meal'}`}>
+            {editMode ? (
+              <select
+                aria-label="Recipe category"
+                value={editValues.recipeCategory}
+                onChange={handleEditField('recipeCategory')}
+              >
+                <option value="">Uncategorized</option>
+                {RecipeCategorySchema.options.map((category) => <option key={category} value={category}>{category[0].toUpperCase() + category.slice(1)}</option>)}
+              </select>
+            ) : (
+              <span>{recipeCategory ? recipeCategory[0].toUpperCase() + recipeCategory.slice(1) : 'Uncategorized'}</span>
+            )}
+          </div>
+          {editMode ? (
+            <label className="recipe-title-editor">
+              <span className="sr-only">Recipe name</span>
+              <input className="input-field" value={editValues.name} onChange={handleEditField('name')} />
+            </label>
+          ) : <h2>{recipeName}</h2>}
         </div>
 
         <div className="recipe-detail-actions">
           <button type="button" className="secondary-button" onClick={shareCurrentRecipe}>Share</button>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => {
-              if (!session) {
-                setSaveState({ type: 'error', message: 'Please sign in to edit this recipe.' })
-                return
-              }
-              setEditMode((current) => !current)
-              setDescribeMode(false)
-              setSaveState(null)
-            }}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            className="primary-button"
-            onClick={() => {
-              if (!session) {
-                setSaveState({ type: 'error', message: 'Please sign in to describe edits for this recipe.' })
-                return
-              }
-              setDescribeMode((current) => !current)
-              setEditMode(false)
-              setSaveState(null)
-            }}
-          >
-            Describe Edits
-          </button>
+          {session && isHouseholdRecipe && !editMode ? (
+            <>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setEditMode(true)
+                  setDescribeMode(false)
+                  setSaveState(null)
+                }}
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => {
+                  setDescribeMode((current) => !current)
+                  setEditMode(false)
+                  setSaveState(null)
+                }}
+              >
+                Describe Edits
+              </button>
+            </>
+          ) : null}
         </div>
       </div>
 
-      {saveState ? <div className={saveState.type === 'success' ? 'status success' : 'status error'}>{saveState.message}</div> : null}
+      {saveState ? <Toast message={saveState.message} type={saveState.type} onDismiss={() => setSaveState(null)} /> : null}
 
-      {(recipe.description || recipe.sourceType || recipe.sourceLink) ? (
+      {(editMode || recipe.description || (isHouseholdRecipe && (recipe.sourceType || recipe.sourceLink))) ? (
         <div className="recipe-summary-card">
-          {recipe.description ? <p className="recipe-summary-text">{recipe.description}</p> : null}
-          <div className="recipe-source-row">
-            {recipe.sourceType ? <span className="recipe-source-badge">{recipe.sourceType}</span> : null}
-            {recipe.sourceLink ? (
-              <a href={recipe.sourceLink} target="_blank" rel="noreferrer" className="recipe-source-link">
-                View source
-              </a>
-            ) : null}
-          </div>
+          {editMode ? (
+            <>
+              <label className="field-group">
+                <span>Description</span>
+                <textarea className="textarea-field" rows={3} value={editValues.description} onChange={handleEditField('description')} />
+              </label>
+              {isHouseholdRecipe ? (
+                <div className="recipe-source-edit-grid">
+                  <label className="field-group">
+                    <span>Source type</span>
+                    <input className="input-field" value={editValues.sourceType} onChange={handleEditField('sourceType')} />
+                  </label>
+                  <label className="field-group">
+                    <span>Source link</span>
+                    <input className="input-field" value={editValues.sourceLink} onChange={handleEditField('sourceLink')} />
+                  </label>
+                </div>
+              ) : null}
+            </>
+          ) : recipe.description ? <p className="recipe-summary-text">{recipe.description}</p> : null}
+          {isHouseholdRecipe ? (
+            editMode ? null : (
+              <div className="recipe-source-row">
+                {recipe.sourceType ? <span className="recipe-source-badge">{recipe.sourceType}</span> : null}
+                {recipe.sourceLink ? (
+                  <a href={recipe.sourceLink} target="_blank" rel="noreferrer" className="recipe-source-link">
+                    View source
+                  </a>
+                ) : null}
+              </div>
+            )
+          ) : null}
         </div>
       ) : null}
 
-      {servings || prepMinutes || cookMinutes || totalMinutes || recipeCategories.length ? (
+      {editMode || servings || prepMinutes || cookMinutes || totalMinutes || recipeCategory ? (
         <div className="recipe-detail-metrics">
-          {servings ? <div className="metric-card"><span>Servings</span><strong>{servings}</strong></div> : null}
-          {prepMinutes ? <div className="metric-card"><span>Prep Time</span><strong>{formatDurationText(prepMinutes)}</strong></div> : null}
-          {cookMinutes ? <div className="metric-card"><span>Cook Time</span><strong>{formatDurationText(cookMinutes)}</strong></div> : null}
+          <div className="metric-card">
+            <span>Servings</span>
+            {editMode ? <input className="input-field" type="number" min="0" value={editValues.recipeYield} onChange={handleEditField('recipeYield')} /> : <strong>{servings}</strong>}
+          </div>
+          <div className="metric-card">
+            <span>Prep Time</span>
+            {editMode ? <input className="input-field" type="number" min="0" value={editValues.prepTime} onChange={handleEditField('prepTime')} /> : <strong>{formatDurationText(prepMinutes)}</strong>}
+          </div>
+          <div className="metric-card">
+            <span>Cook Time</span>
+            {editMode ? <input className="input-field" type="number" min="0" value={editValues.cookTime} onChange={handleEditField('cookTime')} /> : <strong>{formatDurationText(cookMinutes)}</strong>}
+          </div>
           {totalMinutes ? <div className="metric-card"><span>Total Time</span><strong>{formatDurationText(totalMinutes)}</strong></div> : null}
-          {recipeCategories.length ? <div className="metric-card wide"><span>Categories</span><strong>{recipeCategories.join(', ')}</strong></div> : null}
         </div>
       ) : null}
 
@@ -460,74 +518,11 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
         </div>
       ) : null}
 
-      {editMode ? (
-        <div className="recipe-editor-card">
-          <h3>Edit Recipe</h3>
-          <div className="recipe-edit-grid">
-            <label className="field-group">
-              <span>Name</span>
-              <input className="input-field" value={editValues.name} onChange={handleEditField('name')} />
-            </label>
-            <label className="field-group">
-              <span>Source type</span>
-              <input className="input-field" value={editValues.sourceType} onChange={handleEditField('sourceType')} />
-            </label>
-            <label className="field-group full-width">
-              <span>Description</span>
-              <textarea className="textarea-field" rows={3} value={editValues.description} onChange={handleEditField('description')} />
-            </label>
-            <label className="field-group full-width">
-              <span>Source link</span>
-              <input className="input-field" value={editValues.sourceLink} onChange={handleEditField('sourceLink')} />
-            </label>
-            <label className="field-group">
-              <span>Servings</span>
-              <input className="input-field" value={editValues.recipeYield} onChange={handleEditField('recipeYield')} />
-            </label>
-            <label className="field-group">
-              <span>Prep time (minutes)</span>
-              <input className="input-field" type="number" min="0" value={editValues.prepTime} onChange={handleEditField('prepTime')} />
-            </label>
-            <label className="field-group">
-              <span>Cook time (minutes)</span>
-              <input className="input-field" type="number" min="0" value={editValues.cookTime} onChange={handleEditField('cookTime')} />
-            </label>
-            <label className="field-group">
-              <span>Total time (minutes)</span>
-              <input className="input-field" type="number" min="0" value={editValues.totalTime} onChange={handleEditField('totalTime')} />
-            </label>
-            <label className="field-group full-width">
-              <span>Category</span>
-              <select className="input-field" value={editValues.recipeCategory} onChange={handleEditField('recipeCategory')}>
-                <option value="">No category</option>
-                {RecipeCategorySchema.options.map((category) => <option key={category} value={category}>{category}</option>)}
-              </select>
-            </label>
-            <label className="field-group full-width">
-              <span>Ingredients (one per line)</span>
-              <textarea className="textarea-field" rows={6} value={editValues.recipeIngredient} onChange={handleEditField('recipeIngredient')} />
-            </label>
-            <label className="field-group full-width">
-              <span>Instructions (one per line)</span>
-              <textarea className="textarea-field" rows={8} value={editValues.recipeInstructions} onChange={handleEditField('recipeInstructions')} />
-            </label>
-          </div>
-          <div className="compact-actions">
-            <button type="button" className="secondary-button" onClick={() => setEditMode(false)}>
-              Cancel
-            </button>
-            <button type="button" className="primary-button" onClick={() => void handleSaveEdit()} disabled={isSaving}>
-              {isSaving ? 'Saving…' : 'Save changes'}
-            </button>
-          </div>
-        </div>
-      ) : null}
-
       <div className="recipe-detail-columns">
         <section className="recipe-detail-card">
           <div className="recipe-ingredients-heading">
             <h3>Ingredients</h3>
-            <div className="ingredient-copy-control">
+            {!editMode ? <div className="ingredient-copy-control">
               <button type="button" className="ingredient-copy-main" onClick={() => void copyIngredients()} disabled={!recipeIngredients.length}>
                 Copy
               </button>
@@ -555,9 +550,14 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
                   </button>
                 </div>
               ) : null}
-            </div>
+            </div> : null}
           </div>
-          {recipeIngredients.length ? (
+          {editMode ? (
+            <label className="field-group">
+              <span className="sr-only">Ingredients, one per line</span>
+              <textarea className="textarea-field recipe-list-editor" rows={Math.max(6, Math.min(12, editValues.recipeIngredient.split('\n').length + 2))} value={editValues.recipeIngredient} onChange={handleEditField('recipeIngredient')} />
+            </label>
+          ) : recipeIngredients.length ? (
             <ul>{recipeIngredients.map((ingredient, index) => <li key={`${ingredient}-${index}`}>{ingredient}</li>)}</ul>
           ) : (
             <p className="recipe-empty-detail">No ingredients have been added yet.</p>
@@ -566,13 +566,36 @@ export function SingleRecipePage({ slug, session }: SingleRecipePageProps) {
 
         <section className="recipe-detail-card">
           <h3>Instructions</h3>
-          {recipeInstructions.length ? (
+          {editMode ? (
+            <label className="field-group">
+              <span className="sr-only">Instructions, one per line</span>
+              <textarea className="textarea-field recipe-list-editor" rows={Math.max(8, Math.min(16, editValues.recipeInstructions.split('\n').length + 2))} value={editValues.recipeInstructions} onChange={handleEditField('recipeInstructions')} />
+            </label>
+          ) : recipeInstructions.length ? (
             <ol>{recipeInstructions.map((step, index) => <li key={`${step}-${index}`}>{step}</li>)}</ol>
           ) : (
             <p className="recipe-empty-detail">No instructions have been added yet.</p>
           )}
         </section>
       </div>
+      {editMode ? (
+        <div className="recipe-edit-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => {
+              setEditValues(buildEditValues(recipe))
+              setEditMode(false)
+            }}
+            disabled={isSaving}
+          >
+            Cancel
+          </button>
+          <button type="button" className="primary-button" onClick={() => void handleSaveEdit()} disabled={isSaving}>
+            {isSaving ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
+      ) : null}
     </section>
   )
 }

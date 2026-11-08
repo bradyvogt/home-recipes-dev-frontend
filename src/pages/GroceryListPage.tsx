@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
+import { Toast } from '../components/Toast'
 
 type GroceryItem = {
   id: string
@@ -126,6 +127,7 @@ export function GroceryListPage() {
 
   return (
     <section className="page-card grocery-page">
+      {message ? <Toast message={message} type="error" onDismiss={() => setMessage('')} /> : null}
       <div className="page-header grocery-header">
         <div>
           <div className="eyebrow">Household</div>
@@ -157,8 +159,6 @@ export function GroceryListPage() {
           {isSaving ? 'Saving…' : 'Add item'}
         </button>
       </form>
-
-      {message ? <p className="grocery-message" role="alert">{message}</p> : null}
 
       {isLoading ? (
         <p className="grocery-empty-state">Loading your household list…</p>
