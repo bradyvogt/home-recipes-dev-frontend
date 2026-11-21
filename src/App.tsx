@@ -22,6 +22,9 @@ const navItems = [
   { key: 'home', label: 'Home / About' },
 ] as const
 
+const AUTH_RETURN_TO_KEY = 'auth:return-to'
+const AUTH_RETURN_TO_MAX_AGE_MS = 15 * 60 * 1000
+
 function App() {
   const [session, setSession] = useState<Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -34,17 +37,47 @@ function App() {
   const isSharedRecipesPage = activePage === 'my-recipes' && Boolean(sharedHouseholdId)
 
   useEffect(() => {
+    const restoreAuthReturnTo = (hasSession: boolean) => {
+      if (!hasSession) return
+
+      const pendingReturnTo = sessionStorage.getItem(AUTH_RETURN_TO_KEY)
+      if (!pendingReturnTo) return
+
+      sessionStorage.removeItem(AUTH_RETURN_TO_KEY)
+
+      try {
+        const value: unknown = JSON.parse(pendingReturnTo)
+        if (!value || typeof value !== 'object') return
+
+        const { path, createdAt } = value as { path?: unknown; createdAt?: unknown }
+        if (
+          typeof path !== 'string'
+          || !path.startsWith('/')
+          || path.startsWith('//')
+          || typeof createdAt !== 'number'
+          || Date.now() - createdAt > AUTH_RETURN_TO_MAX_AGE_MS
+        ) {
+          return
+        }
+
+        navigate(path, { replace: true })
+      } catch (error) {
+        console.error('Unable to restore the page after sign-in.', error)
+      }
+    }
+
     const loadSession = async () => {
       const { data } = await supabase.auth.getSession()
       setSession(data.session)
+      restoreAuthReturnTo(Boolean(data.session))
       setIsLoading(false)
     }
 
     void loadSession()
     const { data: authListener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession)
-      if (event === 'SIGNED_IN' && nextSession) {
-        navigate('/my-recipes', { replace: true })
+      if (event === 'SIGNED_IN') {
+        restoreAuthReturnTo(Boolean(nextSession))
       }
     })
 
@@ -83,6 +116,11 @@ function App() {
   }
 
   const handleGoogleSignIn = async () => {
+    sessionStorage.setItem(AUTH_RETURN_TO_KEY, JSON.stringify({
+      path: `${location.pathname}${location.search}${location.hash}`,
+      createdAt: Date.now(),
+    }))
+
     const redirectTo = new URL(import.meta.env.BASE_URL || '/', window.location.origin).toString()
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -92,6 +130,7 @@ function App() {
     })
 
     if (error) {
+      sessionStorage.removeItem(AUTH_RETURN_TO_KEY)
       console.error('Google sign-in failed:', error)
     }
   }
