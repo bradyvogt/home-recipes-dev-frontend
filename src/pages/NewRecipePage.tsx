@@ -2,8 +2,9 @@ import { useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { Toast } from '../components/Toast'
+import { normalizeStoredRecipe, type Recipe } from '../lib/recipeSchema'
 
-type RecipeMethod = 'url' | 'image' | 'describe'
+type RecipeMethod = 'url' | 'image' | 'describe' | 'json'
 
 type NewRecipePageProps = {
   session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'] | null
@@ -18,11 +19,26 @@ type FeedbackState = {
   message: string
 }
 
+type ImportEntry = {
+  index: number
+  recipe: Recipe | null
+  error?: string
+  status: 'pending' | 'imported' | 'failed'
+  importError?: string
+}
+
+const MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+
 export function NewRecipePage({ session, onGoogleSignIn, onRecipeAdded }: NewRecipePageProps) {
   const [method, setMethod] = useState<RecipeMethod>('url')
   const [url, setUrl] = useState('')
   const [description, setDescription] = useState('')
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [importFileName, setImportFileName] = useState('')
+  const [importEntries, setImportEntries] = useState<ImportEntry[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [feedback, setFeedback] = useState<FeedbackState | null>(null)
 
@@ -50,6 +66,7 @@ export function NewRecipePage({ session, onGoogleSignIn, onRecipeAdded }: NewRec
     { key: 'url', label: 'By URL', description: 'Paste a recipe page or blog post URL' },
     { key: 'image', label: 'By image', description: 'Upload a photo of a handwritten or printed recipe' },
     { key: 'describe', label: 'Describe', description: 'Type the recipe ingredients and steps in plain English' },
+    { key: 'json', label: 'Import JSON', description: 'Add recipes from a JSON file' },
   ]
 
   const getAuthHeaders = async (contentType?: string): Promise<Headers> => {
@@ -123,6 +140,64 @@ export function NewRecipePage({ session, onGoogleSignIn, onRecipeAdded }: NewRec
     }
 
     throw lastError ?? new Error('The recipe import endpoint is unavailable.')
+  }
+
+  const handleJsonFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    setImportFileName(file?.name ?? '')
+    setImportEntries([])
+    setFeedback(null)
+
+    if (!file) return
+    if (file.size > MAX_IMPORT_FILE_SIZE) {
+      setFeedback({ type: 'error', message: 'Choose a JSON file smaller than 10 MB.' })
+      return
+    }
+
+    try {
+      const parsed: unknown = JSON.parse(await file.text())
+      const rawRecipes = Array.isArray(parsed)
+        ? parsed
+        : isRecord(parsed) && Array.isArray(parsed.recipes)
+          ? parsed.recipes
+          : null
+
+      if (!rawRecipes?.length) {
+        throw new Error('The JSON file must contain a non-empty recipe array.')
+      }
+
+      const entries = rawRecipes.map((value, index): ImportEntry => {
+        try {
+          if (!isRecord(value)) {
+            throw new Error('Expected a recipe object.')
+          }
+
+          const recipe = normalizeStoredRecipe(value)
+          if (!recipe.name.trim()) {
+            throw new Error('Recipe name is required.')
+          }
+          if (recipe.recipeYield < 1) {
+            throw new Error('Servings must be a positive number.')
+          }
+
+          return { index: index + 1, recipe, status: 'pending' }
+        } catch (error) {
+          return {
+            index: index + 1,
+            recipe: null,
+            error: error instanceof Error ? error.message : 'Recipe is not in a supported format.',
+            status: 'pending',
+          }
+        }
+      })
+
+      setImportEntries(entries)
+    } catch (error) {
+      setFeedback({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Unable to read this JSON file.',
+      })
+    }
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -208,6 +283,52 @@ export function NewRecipePage({ session, onGoogleSignIn, onRecipeAdded }: NewRec
 
         setDescription('')
       }
+
+      if (method === 'json') {
+        const validEntries = importEntries.filter((entry) => entry.recipe)
+        if (!validEntries.length) {
+          throw new Error('Choose a JSON file with at least one valid recipe.')
+        }
+
+        let importedCount = 0
+        let failedCount = 0
+
+        for (const entry of validEntries) {
+          if (entry.status === 'imported' || !entry.recipe) continue
+
+          try {
+            const { error } = await supabase
+              .from('recipes')
+              .insert({ recipe_data: entry.recipe })
+
+            if (error) throw error
+
+            importedCount += 1
+            setImportEntries((current) => current.map((item) =>
+              item.index === entry.index ? { ...item, status: 'imported', importError: undefined } : item,
+            ))
+          } catch (error) {
+            failedCount += 1
+            setImportEntries((current) => current.map((item) =>
+              item.index === entry.index
+                ? { ...item, status: 'failed', importError: error instanceof Error ? error.message : 'Insert failed.' }
+                : item,
+            ))
+          }
+        }
+
+        const invalidCount = importEntries.filter((entry) => !entry.recipe).length
+        const message = [
+          `Imported ${importedCount} recipe${importedCount === 1 ? '' : 's'}.`,
+          failedCount ? `${failedCount} failed and can be retried.` : '',
+          invalidCount ? `${invalidCount} invalid entr${invalidCount === 1 ? 'y was' : 'ies were'} skipped.` : '',
+        ].filter(Boolean).join(' ')
+
+        setFeedback({
+          type: failedCount || invalidCount ? 'error' : 'success',
+          message,
+        })
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Something went wrong while adding the recipe.'
       setFeedback({ type: 'error', message })
@@ -233,7 +354,7 @@ export function NewRecipePage({ session, onGoogleSignIn, onRecipeAdded }: NewRec
 
         <div className="sign-in-card">
           <h3>Please sign in</h3>
-          <p>Save your recipe to your kitchen and use AI to pull details from a URL, image, or description.</p>
+          <p>Save recipes to your kitchen from a URL, image, description, or JSON file.</p>
           <button type="button" className="primary-button" onClick={() => void onGoogleSignIn()}>
             Sign in with Google
           </button>
@@ -318,11 +439,55 @@ export function NewRecipePage({ session, onGoogleSignIn, onRecipeAdded }: NewRec
             </div>
           ) : null}
 
+          {method === 'json' ? (
+            <div className="field-group">
+              <label htmlFor="recipe-json-file">Recipe JSON file</label>
+              <input
+                id="recipe-json-file"
+                className="file-field"
+                type="file"
+                accept=".json,application/json"
+                disabled={isSubmitting}
+                onChange={(event) => void handleJsonFileChange(event)}
+              />
+              <p className="import-help">
+                Choose a JSON array of recipes or an object with a recipes array. Recipes are validated
+                before import and saved to your household. Importing the same file again creates duplicates.
+              </p>
+              {importFileName ? <span className="file-pill">{importFileName}</span> : null}
+              {importEntries.length ? (
+                <div className="import-preview" aria-live="polite">
+                  <strong>
+                    {importEntries.filter((entry) => entry.recipe).length} valid of {importEntries.length} recipes
+                  </strong>
+                  <ul className="import-recipe-list">
+                    {importEntries.map((entry) => (
+                      <li key={entry.index} className={entry.error ? 'import-recipe invalid' : 'import-recipe'}>
+                        <span>
+                          {entry.recipe?.name ?? `Recipe ${entry.index}`}
+                          {entry.error ? <small>{entry.error}</small> : null}
+                          {entry.importError ? <small>{entry.importError}</small> : null}
+                        </span>
+                        <span className={`import-status ${entry.error ? 'invalid' : entry.status}`}>
+                          {entry.error ? 'Invalid' : entry.status === 'pending' ? 'Ready' : entry.status}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           {feedback ? <Toast message={feedback.message} type={feedback.type} onDismiss={() => setFeedback(null)} /> : null}
 
           <div className="submit-row">
-            <button type="submit" className="primary-button" disabled={isSubmitting}>
-              {isSubmitting ? 'Adding…' : 'Add recipe'}
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={isSubmitting || (method === 'json' && !importEntries.some((entry) => entry.recipe && entry.status !== 'imported'))}
+            >
+              {isSubmitting ? 'Adding…' : method === 'json' ? 'Import recipes' : 'Add recipe'}
             </button>
           </div>
         </form>

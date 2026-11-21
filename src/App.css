@@ -982,7 +982,7 @@
 
 .recipe-option-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -1075,6 +1075,71 @@
   padding: 0.4rem 0.7rem;
   font-size: 0.8rem;
   font-weight: 700;
+}
+
+.import-help {
+  margin: 0;
+  color: #66564d;
+  line-height: 1.5;
+}
+
+.import-preview {
+  display: grid;
+  gap: 10px;
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid #f2e5d7;
+  border-radius: 14px;
+  background: #fffaf7;
+  padding: 14px;
+}
+
+.import-preview > strong {
+  color: #332822;
+}
+
+.import-recipe-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.import-recipe {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #f2e5d7;
+  padding-bottom: 8px;
+}
+
+.import-recipe > span:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.import-recipe small {
+  color: #a63f32;
+  line-height: 1.4;
+}
+
+.import-status {
+  flex: 0 0 auto;
+  color: #76675f;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.import-status.imported {
+  color: #28723b;
+}
+
+.import-status.failed,
+.import-status.invalid {
+  color: #a63f32;
 }
 
 .status {
@@ -1649,6 +1714,10 @@
   .recipe-detail-columns {
     grid-template-columns: 1fr;
     gap: 22px;
+  }
+
+  .recipe-option-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .recipe-detail-header {
