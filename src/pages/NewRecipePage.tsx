@@ -74,55 +74,39 @@ export function NewRecipePage({ session, onGoogleSignIn, onRecipeAdded }: NewRec
 
   const invokeRecipeImport = async (route: 'url' | 'image' | 'describe', payload: BodyInit, headers?: Headers) => {
     const actualRoute = route === 'describe' ? 'freeform-text' : route
-    const candidates = [
-      `${SUPABASE_FUNCTION_ROOT}/index-recipe/${actualRoute}`,
-      `${SUPABASE_FUNCTION_ROOT}/index-recipe/index-recipe/${actualRoute}`,
-    ]
+    const endpoint = `${SUPABASE_FUNCTION_ROOT}/index-recipe/${actualRoute}`
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: payload,
+    })
 
-    let lastError: Error | null = null
-
-    for (const endpoint of candidates) {
-      try {
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers,
-          body: payload,
-        })
-
-        if (response.ok) {
-          return await response.json()
-        }
-
-        const errorText = await response.text()
-        let parsedError: { error?: string } | null = null
-        try {
-          parsedError = errorText ? JSON.parse(errorText) : null
-        } catch {
-          // Gateways can return plain-text or HTML errors instead of JSON.
-        }
-        const message = parsedError?.error ?? (response.status === 404
-          ? 'Recipe import endpoint returned 404.'
-          : `Recipe import failed (${response.status}).`)
-
-        if (response.status !== 404) {
-          throw new Error(message)
-        }
-
-        lastError = new Error(message)
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('fetch')) {
-          lastError = error
-          continue
-        }
-
-        lastError = error as Error
-        if (!(error instanceof Error && error.message.includes('404'))) {
-          break
-        }
-      }
+    if (response.ok) {
+      return await response.json()
     }
 
-    throw lastError ?? new Error('The recipe import endpoint is unavailable.')
+    const errorText = await response.text()
+    let parsedError: { error?: string; code?: string } | null = null
+    try {
+      parsedError = errorText ? JSON.parse(errorText) : null
+    } catch {
+      // Gateways can return plain-text or HTML errors instead of JSON.
+    }
+
+    const errorMessage = parsedError?.error ?? errorText
+    const sourceAccessDenied = route === 'url' && (
+      parsedError?.code === 'SOURCE_ACCESS_DENIED'
+      || response.status === 403
+      || /failed to fetch url:\s*(forbidden|unauthorized)|access denied|403 forbidden/i.test(errorMessage)
+    )
+    if (sourceAccessDenied) {
+      throw new Error(
+        "This website denied access to that URL, so we couldn't fetch the recipe. Choose Describe to paste the recipe or By image to upload a screenshot."
+      )
+    }
+
+    const message = errorMessage || `Recipe import failed (${response.status}).`
+    throw new Error(message)
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
